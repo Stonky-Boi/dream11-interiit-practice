@@ -42,7 +42,7 @@ def load_data_and_roles():
 # --- Main App Logic ---
 st.sidebar.title("Configuration")
 
-# ADDED: Model Selector
+# Model Selector
 model_choice = st.sidebar.selectbox(
     "Choose a Model",
     ("lightgbm", "xgboost")
@@ -54,7 +54,6 @@ data_df, roles_df = load_data_and_roles()
 if all(v is not None for v in [predictor, data_df, roles_df]):
     st.sidebar.title("Navigation")
     page = st.sidebar.radio("Go to", ["Team Recommender", "Model Evaluator"])
-
     if page == "Team Recommender":
         product_ui.show_page(predictor, data_df, roles_df)
     elif page == "Model Evaluator":

@@ -30,6 +30,5 @@ def solve_team_optimization(players_df, points_col='predicted_points'):
         prob += pl.lpSum([player_vars[i] for i in player_ids if players[i]['team'] == teams[1]]) >= 1
 
     prob.solve(pl.PULP_CBC_CMD(msg=0))
-
     selected_player_indices = [i for i in player_ids if player_vars[i].varValue == 1]
     return players_df.loc[selected_player_indices]

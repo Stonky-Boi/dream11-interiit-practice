@@ -15,25 +15,20 @@ def parse_match_json(file_path):
     """
     with open(file_path, 'r') as f:
         data = json.load(f)
-
     match_id = file_path.stem
     info = data.get('info', {})
-    
     player_to_team = {}
     if 'players' in info:
         for team, players in info['players'].items():
             for player in players:
                 player_to_team[player] = team
-
     player_stats = defaultdict(lambda: defaultdict(int))
     all_players = set()
     if 'players' in info:
         for team_players in info['players'].values():
             all_players.update(team_players)
-    
     for player in all_players:
-        player_stats[player] # Initializes
-
+        player_stats[player]
     for inning in data.get('innings', []):
         for over in inning.get('overs', []):
             for delivery in over.get('deliveries', []):
@@ -42,8 +37,7 @@ def parse_match_json(file_path):
                 runs = delivery['runs']
                 extras = delivery.get('extras', {})
 
-                # --- Enhanced Stat Logic ---
-                # 1. Batting stats (remains the same)
+                # 1. Batting stats
                 player_stats[batter]['runs_scored'] += runs['batter']
                 player_stats[batter]['balls_faced'] += 1
                 if runs['batter'] == 4:
@@ -51,21 +45,19 @@ def parse_match_json(file_path):
                 if runs['batter'] == 6:
                     player_stats[batter]['sixes'] += 1
 
-                # 2. Bowling stats (improved accuracy)
+                # 2. Bowling stats
                 is_legal_delivery = 'wides' not in extras and 'noballs' not in extras
                 if is_legal_delivery:
                     player_stats[bowler]['balls_bowled'] += 1
-
                 runs_from_extras = extras.get('wides', 0) + extras.get('noballs', 0)
                 player_stats[bowler]['runs_conceded'] += runs['batter'] + runs_from_extras
 
-                # 3. Wicket and Fielding stats (improved accuracy)
+                # 3. Wicket and Fielding stats
                 if 'wickets' in delivery:
                     for wicket in delivery['wickets']:
                         # Bowler gets wicket credit (unless it's a run out)
                         if wicket.get('kind') != 'run out':
                              player_stats[bowler]['wickets'] += 1
-                        
                         # Fielding stats for catches, stumpings, and run outs
                         if 'fielders' in wicket:
                             for fielder in wicket['fielders']:
@@ -83,7 +75,7 @@ def parse_match_json(file_path):
         record = {
             'match_id': match_id,
             'player': player,
-            'team': player_to_team.get(player, 'Unknown'), # Add the team name
+            'team': player_to_team.get(player, 'Unknown'),
             'date': info.get('dates', [None])[0],
             'venue': info.get('venue'),
             'city': info.get('city'),
@@ -92,9 +84,7 @@ def parse_match_json(file_path):
         records.append(record)
     return records
 
-
 def process_all_matches(raw_data_dir, interim_data_path):
-    # This function remains largely the same but now processes more columns
     raw_path = Path(raw_data_dir)
     interim_path = Path(interim_data_path)
     interim_path.parent.mkdir(parents=True, exist_ok=True)
@@ -111,11 +101,7 @@ def process_all_matches(raw_data_dir, interim_data_path):
             logging.error(f"Failed to process file {file.name}: {e}")
 
     df = pd.DataFrame(all_match_data)
-    
-    # Define columns that are expected to be numeric stats
-    stat_cols = ['runs_scored', 'balls_faced', 'fours', 'sixes', 'balls_bowled', 
-                 'runs_conceded', 'wickets', 'catches', 'stumpings', 'run_outs']
-
+    stat_cols = ['runs_scored', 'balls_faced', 'fours', 'sixes', 'balls_bowled', 'runs_conceded', 'wickets', 'catches', 'stumpings', 'run_outs']
     for col in df.columns:
         if col in stat_cols:
             df[col] = pd.to_numeric(df[col], errors='coerce').fillna(0).astype(int)
@@ -124,11 +110,9 @@ def process_all_matches(raw_data_dir, interim_data_path):
 
     df['date'] = pd.to_datetime(df['date'], errors='coerce')
     df.dropna(subset=['date'], inplace=True)
-
     logging.info("Saving processed data to interim Parquet file...")
     df.to_parquet(interim_path, index=False)
     logging.info(f"Successfully saved enhanced data to {interim_path}")
-
 
 if __name__ == '__main__':
     RAW_DATA_DIR = 'data/raw/cricsheet_data'

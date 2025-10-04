@@ -38,7 +38,7 @@ def generate_explanation_audio(player_name, explanation):
         text = f"Despite a weaker recent {top_feature_friendly}, {player_name} is still a valuable part of the team."
 
     # Generate audio in memory
-    tts = gTTS(text, lang='en', tld='co.in') # Using Indian English accent
+    tts = gTTS(text, lang='en', tld='co.in') # Use Indian English accent
     audio_fp = io.BytesIO()
     tts.write_to_fp(audio_fp)
     audio_fp.seek(0)
@@ -68,13 +68,13 @@ def show_page(predictor, data_df, roles_df):
                     squad_df['predicted_points'] = predictor.predict(squad_df)
                     squad_df = squad_df.merge(roles_df, on='player', how='left').fillna({'role': 'BAT'})
                     
-                    # **FIX: Save the calculated team to session state**
+                    # Save the calculated team to session state**
                     st.session_state.recommended_team = solve_team_optimization(squad_df, points_col='predicted_points')
                     # Reset audio player state if a new team is generated
                     if 'play_audio_for_player' in st.session_state:
                         del st.session_state.play_audio_for_player
 
-    # **FIX: Display logic now checks session state, so it persists after button clicks**
+    # Display logic now checks session state, so it persists after button clicks**
     if 'recommended_team' in st.session_state:
         st.subheader("🎉 Your AI-Generated Dream Team")
         recommended_team = st.session_state.recommended_team

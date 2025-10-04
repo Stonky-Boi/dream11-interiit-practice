@@ -8,13 +8,10 @@ logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(
 def calculate_fantasy_points(df):
     """
     Calculates fantasy points for each player based on a defined scoring system.
-    [cite_start]This system is based on common fantasy cricket rules as mentioned in the PS. [cite: 104, 198]
-    NOTE: The point values here are representative. Replace with the exact
-    Dream11 point system if available.
-
+    This system is based on common fantasy cricket rules as mentioned in the PS.
+    NOTE: The point values here are representative. Replace with the exact Dream11 point system if available.
     Args:
         df (pd.DataFrame): DataFrame with player performance stats.
-
     Returns:
         pd.DataFrame: DataFrame with an added 'fantasy_points' column.
     """
@@ -49,10 +46,8 @@ def create_rolling_features(df):
     """
     Engineers time-based rolling features for player performance.
     It sorts the data by player and date to calculate historical averages.
-
     Args:
         df (pd.DataFrame): DataFrame with player stats and fantasy points.
-
     Returns:
         pd.DataFrame: DataFrame with new rolling average features.
     """
@@ -82,10 +77,8 @@ def create_rolling_features(df):
 def create_venue_features(df):
     """
     Engineers features based on a player's historical performance at a venue.
-
     Args:
         df (pd.DataFrame): DataFrame with player stats.
-
     Returns:
         pd.DataFrame: DataFrame with new venue-based features.
     """
@@ -110,25 +103,14 @@ def create_venue_features(df):
 if __name__ == '__main__':
     INTERIM_DATA_PATH = 'data/interim/player_match_stats.parquet'
     PROCESSED_DATA_PATH = 'data/processed/final_model_data.parquet'
-    
-    # Check if interim data exists
     interim_path = Path(INTERIM_DATA_PATH)
     if not interim_path.exists():
         logging.error(f"{INTERIM_DATA_PATH} not found. Please run data_preprocessing.py first.")
     else:
-        # Load interim data
         df = pd.read_parquet(interim_path)
-        
-        # 1. Calculate Fantasy Points
         df = calculate_fantasy_points(df)
-        
-        # 2. Create Rolling Features
         df = create_rolling_features(df)
-        
-        # 3. Create Venue Features
         df = create_venue_features(df)
-        
-        # Save final processed data
         processed_path = Path(PROCESSED_DATA_PATH)
         processed_path.parent.mkdir(parents=True, exist_ok=True)
         df.to_parquet(processed_path, index=False)

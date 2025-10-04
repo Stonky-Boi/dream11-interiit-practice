@@ -8,40 +8,29 @@ from UI.utils import solve_team_optimization
 def run_evaluation(train_start, train_end, test_start, test_end, data_df, roles_df, model_choice):
     """Orchestrates the model evaluation process for the selected model type."""
     st.write(f"Training **{model_choice}** model on data from **{train_start}** to **{train_end}**...")
-    
-    # 1. Train Model on selected period
     train_df = data_df[(data_df['date'] >= str(train_start)) & (data_df['date'] <= str(train_end))]
     target = 'fantasy_points'
     features = [col for col in train_df.columns if col.startswith('roll_')]
-    
     X_train = train_df[features]
     y_train = train_df[target]
-
     if model_choice == 'lightgbm':
         model = lgb.LGBMRegressor(objective='regression', random_state=42)
         model.fit(X_train, y_train)
     elif model_choice == 'xgboost':
-        model = xgb.XGBRegressor(objective='reg:squarederror', n_estimators=1000, learning_rate=0.05,
-                                 early_stopping_rounds=50, eval_metric="rmse", random_state=42)
-        # Create a validation set for early stopping
+        model = xgb.XGBRegressor(objective='reg:squarederror', n_estimators=1000, learning_rate=0.05, early_stopping_rounds=50, eval_metric="rmse", random_state=42)
         val_size = int(len(X_train) * 0.1)
         X_train_split, y_train_split = X_train[:-val_size], y_train[:-val_size]
         X_val, y_val = X_train[-val_size:], y_train[-val_size:]
         model.fit(X_train_split, y_train_split, eval_set=[(X_val, y_val)], verbose=False)
-
     st.write("✅ Model training complete.")
 
-    # ... (The rest of the evaluation logic is the same) ...
     st.write(f"Evaluating model on data from **{test_start}** to **{test_end}**...")
     test_df = data_df[(data_df['date'] >= str(test_start)) & (data_df['date'] <= str(test_end))].copy()
     test_df['predicted_points'] = model.predict(test_df[features])
-    
     results = []
     test_matches = test_df['match_id'].unique()
     progress_bar = st.progress(0, text="Evaluating matches...")
-
     for i, match_id in enumerate(test_matches):
-        # ... (processing logic inside the loop is unchanged) ...
         match_df = test_df[test_df['match_id'] == match_id].copy()
         match_df['team'] = match_df['player'].apply(lambda x: data_df[data_df['player'] == x]['team'].iloc[0])
         match_df = match_df.merge(roles_df, on='player', how='left').fillna('BAT')
@@ -57,7 +46,6 @@ def run_evaluation(train_start, train_end, test_start, test_end, data_df, roles_
             'MAE': mae
         })
         progress_bar.progress((i + 1) / len(test_matches), text=f"Evaluating match {i+1}/{len(test_matches)}")
-
     st.write("✅ Evaluation complete.")
     return pd.DataFrame(results)
 
@@ -67,7 +55,6 @@ def show_page(data_df, roles_df, model_choice):
     st.title("📊 Model Performance Evaluator")
     st.write(f"You are currently evaluating the **{model_choice}** model.")
     
-    # ... (the date inputs are the same) ...
     today = date.today()
     col1, col2 = st.columns(2)
     with col1:

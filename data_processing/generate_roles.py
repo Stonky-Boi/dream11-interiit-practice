@@ -63,9 +63,7 @@ def infer_player_roles(raw_data_dir):
 if __name__ == '__main__':
     RAW_DATA_DIR = 'data/raw/cricsheet_data'
     OUTPUT_PATH = 'data/processed/player_roles.csv'
-    
     roles_df = infer_player_roles(RAW_DATA_DIR)
-    
     if not roles_df.empty:
         roles_df.drop_duplicates(subset=['player'], inplace=True)
         roles_df.to_csv(OUTPUT_PATH, index=False)
