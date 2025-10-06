@@ -6,21 +6,12 @@ from datetime import date, timedelta
 from UI.utils import solve_team_optimization
 
 def run_evaluation(train_start, train_end, test_start, test_end, data_df, roles_df, model_choice):
-    """
-    Orchestrates the model evaluation process and returns the train, test, and results dataframes.
-    """
     st.write(f"Training **{model_choice}** model on data from **{train_start}** to **{train_end}**...")
-    
-    # 1. Prepare Train and Test DataFrames
     train_df = data_df[(data_df['date'] >= str(train_start)) & (data_df['date'] <= str(train_end))].copy()
     test_df = data_df[(data_df['date'] >= str(test_start)) & (data_df['date'] <= str(test_end))].copy()
-
     target = 'fantasy_points'
     features = [col for col in train_df.columns if col.startswith('roll_')]
-    X_train = train_df[features]
-    y_train = train_df[target]
-    
-    # 2. Train Model
+    X_train, y_train = train_df[features], train_df[target]
     if model_choice == 'lightgbm':
         model = lgb.LGBMRegressor(objective='regression', random_state=42)
         model.fit(X_train, y_train)
@@ -32,14 +23,11 @@ def run_evaluation(train_start, train_end, test_start, test_end, data_df, roles_
         X_val, y_val = X_train.iloc[-val_size:], y_train.iloc[-val_size:]
         model.fit(X_train_split, y_train_split, eval_set=[(X_val, y_val)], verbose=False)
     st.write("✅ Model training complete.")
-
-    # 3. Run Evaluation on Test Set
     st.write(f"Evaluating model...")
     test_df['predicted_points'] = model.predict(test_df[features])
     results = []
     test_matches = test_df['match_id'].unique()
     progress_bar = st.progress(0, text="Evaluating matches...")
-
     for i, match_id in enumerate(test_matches):
         match_df = test_df[test_df['match_id'] == match_id].copy()
         match_df['team'] = match_df['player'].apply(lambda x: data_df[data_df['player'] == x]['team'].iloc[0])
@@ -57,8 +45,6 @@ def run_evaluation(train_start, train_end, test_start, test_end, data_df, roles_
         })
         progress_bar.progress((i + 1) / len(test_matches), text=f"Evaluating match {i+1}/{len(test_matches)}")
     st.write("✅ Evaluation complete.")
-    
-    # Return all three dataframes
     return train_df, test_df, pd.DataFrame(results)
 
 def show_page(data_df, roles_df, model_choice):
@@ -82,30 +68,34 @@ def show_page(data_df, roles_df, model_choice):
             st.error("Error: The training period must end before the testing period begins.")
         else:
             train_results, test_results, eval_results = run_evaluation(train_start, train_end, test_start, test_end, data_df, roles_df, model_choice)
-            
-            st.subheader("Evaluation Results")
-            st.dataframe(eval_results)
-            
-            st.subheader("⬇️ Download Evaluation Artifacts")
-            col_a, col_b, col_c = st.columns(3)
-            with col_a:
-                st.download_button(
-                    label="Training Data",
-                    data=train_results.to_csv(index=False).encode('utf-8'),
-                    file_name=f'training_data_{today}.csv',
-                    mime='text/csv'
-                )
-            with col_b:
-                st.download_button(
-                    label="Testing Data",
-                    data=test_results.to_csv(index=False).encode('utf-8'),
-                    file_name=f'testing_data_{today}.csv',
-                    mime='text/csv'
-                )
-            with col_c:
-                st.download_button(
-                    label="Evaluation Results",
-                    data=eval_results.to_csv(index=False).encode('utf-8'),
-                    file_name=f'evaluation_results_{model_choice}_{today}.csv',
-                    mime='text/csv'
-                )
+            st.session_state.eval_train_results = train_results
+            st.session_state.eval_test_results = test_results
+            st.session_state.eval_results = eval_results
+
+    if 'eval_results' in st.session_state:
+        st.subheader("Evaluation Results")
+        st.dataframe(st.session_state.eval_results)
+        
+        st.subheader("⬇️ Download Evaluation Artifacts")
+        col_a, col_b, col_c = st.columns(3)
+        with col_a:
+            st.download_button(
+                label="Training Data",
+                data=st.session_state.eval_train_results.to_csv(index=False).encode('utf-8'),
+                file_name=f'training_data_{today}.csv',
+                mime='text/csv'
+            )
+        with col_b:
+            st.download_button(
+                label="Testing Data",
+                data=st.session_state.eval_test_results.to_csv(index=False).encode('utf-8'),
+                file_name=f'testing_data_{today}.csv',
+                mime='text/csv'
+            )
+        with col_c:
+            st.download_button(
+                label="Evaluation Results",
+                data=st.session_state.eval_results.to_csv(index=False).encode('utf-8'),
+                file_name=f'evaluation_results_{model_choice}_{today}.csv',
+                mime='text/csv'
+            )

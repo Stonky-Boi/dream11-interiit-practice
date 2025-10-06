@@ -4,17 +4,22 @@ from UI.utils import solve_team_optimization
 from gtts import gTTS
 import io
 
-# --- Feature Name Translator for your new features ---
 FEATURE_NAME_MAP = {
-    'roll_runs_scored_3': 'strong recent run-scoring form',
+    'roll_runs_scored_3': 'strong run-scoring form in the last 3 matches',
     'roll_runs_scored_5': 'consistent run-scoring over the last 5 matches',
-    'roll_runs_scored_10': 'a proven long-term record of scoring runs',
-    'roll_balls_faced_5': 'a good record of spending time at the crease',
+    'roll_runs_scored_10': 'proven long-term record of scoring runs',
+    'roll_balls_faced_3': 'good record of batting for long periods recently',
+    'roll_balls_faced_5': 'spending significant time at the crease in recent matches',
+    'roll_balls_faced_10': 'proven ability to build a long innings',
     'roll_wickets_3': 'excellent recent wicket-taking form',
-    'roll_wickets_5': 'a consistent wicket-taker over the last 5 matches',
-    'roll_wickets_10': 'a proven long-term wicket-taker',
-    'roll_runs_conceded_5': 'a solid recent economy rate',
-    'roll_catches_5': 'strong recent fielding performance with catches'
+    'roll_wickets_5': 'being a consistent wicket-taker over the last 5 matches',
+    'roll_wickets_10': 'proven history as a long-term wicket-taker',
+    'roll_runs_conceded_3': 'excellent recent economy rate',
+    'roll_runs_conceded_5': 'solid and consistent economy rate',
+    'roll_runs_conceded_10': 'reliable and economical bowling history',
+    'roll_catches_3': 'great recent fielding with multiple catches',
+    'roll_catches_5': 'safe pair of hands in the field recently',
+    'roll_catches_10': 'reliable and consistent fielding'
 }
 
 def get_squad_data(team1, team2, all_data_df):
