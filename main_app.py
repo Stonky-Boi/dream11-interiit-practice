@@ -29,10 +29,10 @@ def load_predictor(model_name="lightgbm"):
 
 @st.cache_data
 def load_data_and_roles():
-    """Load all necessary data once and cache it."""
+    """Load all necessary CSV data once and cache it."""
     try:
-        data_df = pd.read_parquet('data/processed/final_model_data.parquet')
-        data_df['date'] = pd.to_datetime(data_df['date'])
+        # CHANGED: Read from CSV and parse the date column
+        data_df = pd.read_csv('data/processed/final_model_data.csv', parse_dates=['date'])
         roles_df = pd.read_csv('data/processed/player_roles.csv')
         return data_df, roles_df
     except FileNotFoundError as e:
@@ -42,7 +42,6 @@ def load_data_and_roles():
 # --- Main App Logic ---
 st.sidebar.title("Configuration")
 
-# Model Selector
 model_choice = st.sidebar.selectbox(
     "Choose a Model",
     ("lightgbm", "xgboost")
