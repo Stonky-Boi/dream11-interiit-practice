@@ -56,9 +56,9 @@ class ModelPredictor:
         return self.model.predict(input_data)
     
     def evaluate_on_test_data(self, test_data, n_samples=20):
-        """
-        Evaluate model on test data - compare predictions vs actual.
-        """
+        
+        #Evaluate model on test data - compare predictions vs actual.
+        
         logging.info("\n" + "="*80)
         logging.info("MODEL EVALUATION ON TEST DATA")
         logging.info("="*80)
@@ -67,13 +67,10 @@ class ModelPredictor:
             logging.error("No test data provided!")
             return
         
-        # Sample data
         sample_data = test_data.sample(n=min(n_samples, len(test_data)), random_state=42)
         
-        # Make predictions
         predictions = self.predict(sample_data)
         
-        # Create results DataFrame
         results = sample_data[['player', 'team', 'date', 'fantasy_points']].copy()
         results['Predicted_Points'] = predictions
         results['Error'] = results['fantasy_points'] - results['Predicted_Points']
@@ -117,9 +114,7 @@ class ModelPredictor:
         return results
     
     def explain_prediction(self, input_data, player_idx=0):
-        """
-        Explain a single prediction using SHAP.
-        """
+
         if self.features is not None:
             input_data_filtered = input_data[self.features]
         else:
@@ -143,14 +138,11 @@ class ModelPredictor:
                                  budget=100, max_players=11,
                                  min_wk=1, min_bat=1, min_bowl=1, min_ar=1,
                                  max_from_one_team=7):
-        """
-        Recommend fantasy team for a specific match between two teams.
-        """
+    
         logging.info("\n" + "="*80)
         logging.info("GENERATING FANTASY TEAM FOR MATCH")
         logging.info("="*80)
         
-        # Combine both teams
         all_players = pd.concat([team1_players, team2_players], ignore_index=True)
         
         if all_players.empty:
@@ -179,7 +171,6 @@ class ModelPredictor:
             logging.error("No players with roles!")
             return pd.DataFrame()
         
-        # Make predictions
         predictions = self.predict(all_players)
         all_players['predicted_points'] = predictions
         
@@ -211,7 +202,6 @@ class ModelPredictor:
         
         logging.info(f"\nPHASE 1: Filling minimum role requirements")
         
-        # Phase 1: Fill requirements
         for role, min_count in role_requirements.items():
             role_players = all_players[all_players['role'] == role].copy()
             
@@ -234,14 +224,12 @@ class ModelPredictor:
                     logging.info(f"  ✓ {player['player']} ({role}, {player_team}) - "
                                f"{player['predicted_points']:.1f} pts, {player['cost']} cr")
         
-        # Check requirements
         unmet = [role for role, count in role_selected.items() if count < role_requirements[role]]
         
         if unmet:
             logging.error(f"\nFailed to meet requirements for: {unmet}")
             return pd.DataFrame(selected_team) if selected_team else pd.DataFrame()
         
-        # Phase 2: Fill remaining
         logging.info(f"\nPHASE 2: Filling remaining {remaining_slots} slots")
         
         selected_players = [p['player'] for p in selected_team]
@@ -281,8 +269,22 @@ class ModelPredictor:
         return team_df
 
 
-def get_match_squads(df, team1_name, team2_name, lookback_days=180):
-    """Extract recent player data for both teams."""
+def get_match_squads(df, team1_name, team2_name, gender='male', lookback_days=180):
+    """
+    Extract recent player data for both teams WITH GENDER FILTER.
+    
+    Args:
+        df: Full dataset
+        team1_name: Team 1 name
+        team2_name: Team 2 name
+        gender: 'male' or 'female' (default: 'male')
+        lookback_days: Lookback period
+    """
+    # CRITICAL: Filter by gender first
+    if 'gender' in df.columns:
+        df = df[df['gender'] == gender].copy()
+        logging.info(f"Filtering for {gender} cricket")
+    
     team1_data = df[df['team'] == team1_name].copy()
     team2_data = df[df['team'] == team2_name].copy()
     
@@ -297,22 +299,25 @@ def get_match_squads(df, team1_name, team2_name, lookback_days=180):
     team1_players = team1_data.sort_values('date').groupby('player').tail(1).reset_index(drop=True)
     team2_players = team2_data.sort_values('date').groupby('player').tail(1).reset_index(drop=True)
     
+    logging.info(f"{team1_name}: {len(team1_players)} players")
+    logging.info(f"{team2_name}: {len(team2_players)} players")
+    
     return team1_players, team2_players
+
 
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description="Fantasy Cricket Model Predictor")
     parser.add_argument('--model_type', type=str, default='lightgbm', 
                        choices=['lightgbm', 'xgboost'])
-    parser.add_argument('--team1', type=str, default=None,
-                       help='Team 1 name (for match prediction mode)')
-    parser.add_argument('--team2', type=str, default=None,
-                       help='Team 2 name (for match prediction mode)')
-    parser.add_argument('--lookback_days', type=int, default=210)
-    parser.add_argument('--evaluate', action='store_true',
-                       help='Run evaluation mode (predict vs actual)')
-    parser.add_argument('--n_samples', type=int, default=30,
-                       help='Number of samples for evaluation')
+    parser.add_argument('--team1', type=str, default=None)
+    parser.add_argument('--team2', type=str, default=None)
+    parser.add_argument('--gender', type=str, default='male',
+                       choices=['male', 'female'],
+                       help='Cricket gender (male or female)')
+    parser.add_argument('--lookback_days', type=int, default=180)
+    parser.add_argument('--evaluate', action='store_true')
+    parser.add_argument('--n_samples', type=int, default=20)
     
     args = parser.parse_args()
     
@@ -332,17 +337,14 @@ if __name__ == '__main__':
         if args.team1 is None or args.team2 is None or args.evaluate:
             logging.info("Running in EVALUATION mode (comparing predictions vs actual)")
             
-            # Get test data (after training cutoff)
             test_data = df[df['date'] > TRAINING_CUTOFF_DATE].copy()
             
             if test_data.empty:
                 logging.warning("No test data after cutoff. Using recent training data.")
                 test_data = df[df['date'] <= TRAINING_CUTOFF_DATE].tail(100)
             
-            # Evaluate
             results = predictor.evaluate_on_test_data(test_data, n_samples=args.n_samples)
             
-            # Explain one prediction
             if not test_data.empty:
                 sample = test_data.sample(1, random_state=42)
                 explanation = predictor.explain_prediction(sample)
@@ -368,7 +370,9 @@ if __name__ == '__main__':
             logging.info(f"Running in TEAM SELECTION mode for {args.team1} vs {args.team2}")
             
             team1_players, team2_players = get_match_squads(
-                df, args.team1, args.team2, args.lookback_days
+                df, args.team1, args.team2, 
+                gender=args.gender, 
+                lookback_days=args.lookback_days
             )
             
             if team1_players.empty or team2_players.empty:

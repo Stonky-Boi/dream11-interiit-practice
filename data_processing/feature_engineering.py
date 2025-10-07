@@ -7,19 +7,7 @@ import logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
 def calculate_fantasy_points(df):
-    """
-    Calculate fantasy points using OFFICIAL Dream11 T20 scoring rules.
-    Source: https://www.dream11.com/games/point-system
-    
-    FIXED from original:
-    - Wickets: 25 → 30 points (official Dream11)
-    - 5-wicket bonus: 12 → 16 points (official Dream11)
-    - Added: Strike rate bonuses/penalties
-    - Added: Economy rate bonuses/penalties
-    - Added: Duck penalty (-2)
-    - Added: Maiden overs (+12)
-    - Added: 3-catch bonus (+4)
-    """
+
     logging.info("Calculating fantasy points with OFFICIAL Dream11 T20 rules...")
     
     # Initialize points column
@@ -41,15 +29,12 @@ def calculate_fantasy_points(df):
                       np.where(df['runs_scored'] >= 30, 4, 0)))
     df['fantasy_points'] += milestone_bonus
     
-    # Duck penalty: -2 for scoring 0 after facing at least 1 ball
     duck_penalty = np.where((df['runs_scored'] == 0) & (df['balls_faced'] > 0), -2, 0)
     df['fantasy_points'] += duck_penalty
     
-    # Calculate strike rate for SR bonuses
     df['strike_rate'] = np.where(df['balls_faced'] > 0, 
                                   (df['runs_scored'] / df['balls_faced']) * 100, 0)
     
-    # Strike Rate bonuses/penalties (min 10 balls)
     sr_bonus = np.where(
         df['balls_faced'] >= 10,
         np.where(df['strike_rate'] > 170, 6,
@@ -62,26 +47,21 @@ def calculate_fantasy_points(df):
     )
     df['fantasy_points'] += sr_bonus
     
-    # ===== BOWLING POINTS =====
-    # Wickets: +30 per wicket (CORRECTED from 25)
+
     df['fantasy_points'] += df['wickets'] * 30
     
-    # Wicket bonuses (CORRECTED: 5-wicket bonus is 16, not 12)
     wicket_bonus = np.where(df['wickets'] >= 5, 16,
                    np.where(df['wickets'] == 4, 8,
                    np.where(df['wickets'] == 3, 4, 0)))
     df['fantasy_points'] += wicket_bonus
     
-    # Maiden overs: +12 per maiden (NEW)
     df['overs_bowled'] = df['balls_bowled'] / 6.0
     maiden_overs = ((df['balls_bowled'] >= 6) & (df['runs_conceded'] == 0)).astype(int)
     df['fantasy_points'] += maiden_overs * 12
     
-    # Calculate economy rate
     df['economy_rate'] = np.where(df['overs_bowled'] > 0,
                                    df['runs_conceded'] / df['overs_bowled'], 0)
     
-    # Economy Rate bonuses/penalties (min 2 overs) (NEW)
     er_bonus = np.where(
         df['overs_bowled'] >= 2,
         np.where(df['economy_rate'] < 5, 6,
@@ -94,19 +74,15 @@ def calculate_fantasy_points(df):
     )
     df['fantasy_points'] += er_bonus
     
-    # ===== FIELDING POINTS =====
-    # Catches: +8 per catch
+
     df['fantasy_points'] += df['catches'] * 8
     
-    # 3-catch bonus: +4 (NEW)
     catch_bonus = np.where(df['catches'] >= 3, 4, 0)
     df['fantasy_points'] += catch_bonus
     
-    # Stumpings: +12 per stumping (if stumpings column exists)
     if 'stumpings' in df.columns:
         df['fantasy_points'] += df['stumpings'] * 12
     
-    # Run outs: +6 per run out (conservative estimate, as we don't have direct/indirect breakdown)
     if 'run_outs' in df.columns:
         df['fantasy_points'] += df['run_outs'] * 6
     
@@ -116,37 +92,31 @@ def calculate_fantasy_points(df):
 
 
 def create_rolling_features(df):
-    """
-    Enhanced rolling features with weighted averages and volatility metrics.
-    Maintains backward compatibility while adding advanced features.
-    """
+   
     logging.info("Creating enhanced rolling features...")
     
-    # Ensure data is sorted
     df['date'] = pd.to_datetime(df['date'])
     df = df.sort_values(by=['player', 'date']).reset_index(drop=True)
     
     grouped = df.groupby('player')
     
-    # Define rolling windows (same as original)
     windows = [3, 5, 10]
     stats_to_roll = ['fantasy_points', 'runs_scored', 'wickets']
     
-    # Original rolling features (KEEP SAME)
     for stat in stats_to_roll:
         for w in windows:
             df[f'roll_{stat}_{w}'] = grouped[stat].transform(
                 lambda x: x.shift(1).rolling(w, min_periods=1).mean()
             ).fillna(0)
     
-    # NEW: Add rolling standard deviation for consistency
+    # Add rolling standard deviation for consistency
     for stat in stats_to_roll:
         for w in windows:
             df[f'roll_{stat}_{w}_std'] = grouped[stat].transform(
                 lambda x: x.shift(1).rolling(w, min_periods=1).std()
             ).fillna(0)
     
-    # NEW: Weighted rolling average (recent matches weighted more)
+    # Weighted rolling average (recent matches weighted more)
     def weighted_rolling_mean(series, window=5):
         weights = np.arange(1, window + 1)
         return series.shift(1).rolling(window, min_periods=1).apply(
@@ -158,7 +128,7 @@ def create_rolling_features(df):
         lambda x: weighted_rolling_mean(x, 5)
     ).fillna(0)
     
-    # NEW: Form trend (last 3 vs previous 3)
+    # Form trend (last 3 vs previous 3)
     df['form_trend'] = (
         df['roll_fantasy_points_3'] - 
         grouped['fantasy_points'].transform(
@@ -166,7 +136,7 @@ def create_rolling_features(df):
         )
     ).fillna(0)
     
-    # NEW: Consistency score
+    # Consistency score
     df['consistency_score'] = np.where(
         df['roll_fantasy_points_5'] > 0,
         1 / (1 + df['roll_fantasy_points_5_std'] / (df['roll_fantasy_points_5'] + 0.1)),
@@ -178,19 +148,15 @@ def create_rolling_features(df):
 
 
 def create_venue_features(df):
-    """
-    Engineers venue-based features (KEPT FROM ORIGINAL).
-    """
+    
     logging.info("Creating venue features...")
     
     # Calculate player's average fantasy points at each venue
     venue_avg = df.groupby(['player', 'venue'])['fantasy_points'].mean().reset_index()
     venue_avg = venue_avg.rename(columns={'fantasy_points': 'venue_avg_fp'})
     
-    # Merge back
     df = pd.merge(df, venue_avg, on=['player', 'venue'], how='left')
     
-    # Prevent data leakage
     df['venue_avg_fp'] = df.groupby(['player', 'venue'])['venue_avg_fp'].transform(
         lambda x: x.shift(1)
     ).fillna(0)
@@ -200,9 +166,7 @@ def create_venue_features(df):
 
 
 def create_contextual_features(df):
-    """
-    NEW: Create match frequency and experience features.
-    """
+   
     logging.info("Creating contextual features...")
     
     df = df.sort_values(by=['player', 'date']).reset_index(drop=True)
@@ -216,24 +180,19 @@ def create_contextual_features(df):
     logging.info("Contextual features created successfully.")
     return df
 def create_categorical_encodings(df):
-    """
-    Create encoded versions of categorical variables for model training.
-    """
+
     logging.info("Creating categorical encodings...")
     
-    # Encode venue
     if 'venue' in df.columns:
         df['venue_encoded'] = df['venue'].astype('category').cat.codes
     else:
         df['venue_encoded'] = 0
     
-    # Encode team
     if 'team' in df.columns:
         df['team_encoded'] = df['team'].astype('category').cat.codes
     else:
         df['team_encoded'] = 0
     
-    # Encode city if available
     if 'city' in df.columns:
         df['city_encoded'] = df['city'].astype('category').cat.codes
     else:
@@ -267,14 +226,12 @@ if __name__ == '__main__':
         
         logging.info(f"Initial data shape: {df.shape}")
         
-        # Apply all transformations
         df = calculate_fantasy_points(df)
         df = create_rolling_features(df)
         df = create_venue_features(df)
         df = create_contextual_features(df)
         df = create_categorical_encodings(df)
         
-        # Save
         processed_path = Path(PROCESSED_DATA_PATH)
         processed_path.parent.mkdir(parents=True, exist_ok=True)
         df.to_parquet(processed_path, index=False)

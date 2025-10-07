@@ -8,25 +8,27 @@ import argparse
 import logging
 from sklearn.metrics import mean_squared_error, mean_absolute_error, r2_score
 
-# Configure logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
-def train_model(model_type, data_path='data/processed/final_model_data.parquet', artifacts_path='model_artifacts'):
+def train_model(model_type, data_path='data/processed/final_model_data.parquet', 
+                artifacts_path='model_artifacts', gender='male'):
     """
-    Enhanced model training with T20 filtering and comprehensive feature set.
-    
-    Args:
-        model_type (str): The type of model to train ('xgboost' or 'lightgbm').
-        data_path (str): Path to the processed data.
-        artifacts_path (str): Directory to save the trained model.
+    Train model for specific gender.
     """
-    logging.info(f"Starting T20-only model training for: {model_type}")
+    logging.info(f"Starting T20 {gender} cricket model training for: {model_type}")
     
-    # --- 1. Load Data ---
     df = pd.read_parquet(data_path)
+    
+    # Filter by gender
+    if 'gender' in df.columns:
+        df = df[df['gender'] == gender].copy()
+        logging.info(f"Training on {gender} cricket: {len(df)} records")
+    
+    # ... rest of training code
+
     logging.info(f"Loaded data shape: {df.shape}")
     
-    # --- 2. CRITICAL: Filter for T20 ONLY ---
+    # --- Filter for T20 ONLY ---
     if 'match_type' in df.columns:
         non_t20 = df[df['match_type'] != 'T20']
         if len(non_t20) > 0:
@@ -40,7 +42,7 @@ def train_model(model_type, data_path='data/processed/final_model_data.parquet',
     else:
         logging.warning("No match_type column found. Assuming all data is T20.")
     
-    # --- 3. Enforce Training Date Cutoff ---
+    # --- Enforce Training Date Cutoff ---
     TRAINING_CUTOFF_DATE = '2024-06-30'
     df_train = df[df['date'] <= TRAINING_CUTOFF_DATE].copy()
     logging.info(f"Training data filtered to dates on or before {TRAINING_CUTOFF_DATE}")
@@ -50,10 +52,8 @@ def train_model(model_type, data_path='data/processed/final_model_data.parquet',
         logging.error("No training data after filtering!")
         return
     
-    # --- 4. Define Features (X) and Target (y) ---
     target = 'fantasy_points'
     
-    # Enhanced feature selection - include ALL relevant features
     roll_features = [col for col in df_train.columns if col.startswith('roll_')]
     
     # Additional features from enhanced feature engineering
@@ -67,7 +67,6 @@ def train_model(model_type, data_path='data/processed/final_model_data.parquet',
         'venue_encoded', 'team_encoded', 'city_encoded'
     ]
     
-    # Filter to only existing columns
     additional_features = [f for f in additional_features if f in df_train.columns]
     
     features = roll_features + additional_features
@@ -81,7 +80,6 @@ def train_model(model_type, data_path='data/processed/final_model_data.parquet',
     logging.info(f"  - Rolling features: {len(roll_features)}")
     logging.info(f"  - Additional features: {len(additional_features)}")
     
-    # Remove rows with insufficient history (cold start)
     if 'match_count' in df_train.columns:
         df_train = df_train[df_train['match_count'] >= 3].copy()
         logging.info(f"After removing cold start (match_count < 3): {df_train.shape}")
@@ -92,9 +90,7 @@ def train_model(model_type, data_path='data/processed/final_model_data.parquet',
     logging.info(f"Final training set: {X_train.shape}")
     logging.info(f"Target (fantasy_points) - Mean: {y_train.mean():.2f}, Std: {y_train.std():.2f}")
     
-    # --- 5. Train Model ---
     if model_type == 'xgboost':
-        # Enhanced XGBoost with better hyperparameters
         model = xgb.XGBRegressor(
             objective='reg:squarederror',
             n_estimators=1000,
@@ -111,7 +107,6 @@ def train_model(model_type, data_path='data/processed/final_model_data.parquet',
             random_state=42
         )
         
-        # Time-based validation split (last 15%)
         val_size = int(len(X_train) * 0.15)
         X_train_split, y_train_split = X_train[:-val_size], y_train[:-val_size]
         X_val, y_val = X_train[-val_size:], y_train[-val_size:]
@@ -124,7 +119,6 @@ def train_model(model_type, data_path='data/processed/final_model_data.parquet',
             verbose=False
         )
         
-        # Evaluate on validation set
         y_pred = model.predict(X_val)
         rmse = np.sqrt(mean_squared_error(y_val, y_pred))
         mae = mean_absolute_error(y_val, y_pred)
@@ -139,7 +133,6 @@ def train_model(model_type, data_path='data/processed/final_model_data.parquet',
         logging.info(f"{'='*80}\n")
         
     elif model_type == 'lightgbm':
-        # Enhanced LightGBM with better hyperparameters
         model = lgb.LGBMRegressor(
             objective='regression',
             n_estimators=1000,
@@ -154,7 +147,6 @@ def train_model(model_type, data_path='data/processed/final_model_data.parquet',
             verbose=-1
         )
         
-        # Time-based validation split
         val_size = int(len(X_train) * 0.15)
         X_train_split, y_train_split = X_train[:-val_size], y_train[:-val_size]
         X_val, y_val = X_train[-val_size:], y_train[-val_size:]
@@ -180,7 +172,6 @@ def train_model(model_type, data_path='data/processed/final_model_data.parquet',
     else:
         raise ValueError("Invalid model_type. Choose 'xgboost' or 'lightgbm'.")
     
-    # --- 6. Feature Importance ---
     if hasattr(model, 'feature_importances_'):
         feature_importance = pd.DataFrame({
             'feature': features,
@@ -190,11 +181,9 @@ def train_model(model_type, data_path='data/processed/final_model_data.parquet',
         logging.info("\nTop 15 Most Important Features:")
         logging.info(feature_importance.head(15).to_string(index=False))
     
-    # --- 7. Save Model with Metadata ---
     artifacts_dir = Path(artifacts_path)
     artifacts_dir.mkdir(exist_ok=True)
     
-    # Save model with comprehensive metadata
     model_artifact = {
         'model': model,
         'features': features,
