@@ -8,16 +8,14 @@ pd.set_option('display.max_columns', 50)
 pd.set_option('display.width', 1000)
 
 def inspect_csv_file(file_path, export_excel=False):
-    """
-    Loads a CSV file, prints a summary, and optionally exports it to Excel.
-    """
+    
     if not file_path.exists():
         print(f"❌ Error: File not found at '{file_path}'")
         sys.exit(1)
 
     print(f"\n--- 🕵️♂️ Inspecting: {file_path} ---\n")
 
-    df = pd.read_csv(file_path)  # CHANGED to read_csv
+    df = pd.read_csv(file_path)  
 
     print(f"## 1. Shape: Rows: {df.shape[0]}, Columns: {df.shape[1]}\n")
 

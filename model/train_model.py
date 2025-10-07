@@ -17,7 +17,6 @@ def train_model(model_type, data_path='data/processed/final_model_data.csv',
     """
     logging.info(f"Starting T20 {gender} cricket model training for: {model_type}")
     
-    # FIX 1: Add encoding parameter to handle encoding issues
     try:
         df = pd.read_csv(data_path, encoding='utf-8')
     except UnicodeDecodeError:
@@ -42,7 +41,6 @@ def train_model(model_type, data_path='data/processed/final_model_data.csv',
         logging.info(f"Unique T20 matches: {df['match_id'].nunique()}")
         logging.info(f"Unique players: {df['player'].nunique()}")
         
-        # FIX 2: Convert date to datetime properly
         df['date'] = pd.to_datetime(df['date'])
         logging.info(f"Date range: {df['date'].min().date()} to {df['date'].max().date()}")
     else:
@@ -214,7 +212,7 @@ if __name__ == '__main__':
     parser.add_argument(
         '--data_path',
         type=str,
-        default='data/processed/final_model_data.csv',  # FIX 3: Changed to .csv
+        default='data/processed/final_model_data.csv',  
         help="Path to processed data file"
     )
     parser.add_argument(

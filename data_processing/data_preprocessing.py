@@ -129,7 +129,7 @@ def parse_match_json(file_path):
 
 def process_all_matches(raw_data_dir, output_path):
     """
-    Process all T20 matches with gender tracking - SAVE AS CSV.
+    Process all T20 matches with gender tracking .
     """
     raw_path = Path(raw_data_dir)
     
@@ -202,7 +202,7 @@ def process_all_matches(raw_data_dir, output_path):
 
 if __name__ == '__main__':
     RAW_DATA_DIR = 'data/raw/cricsheet_data'
-    INTERIM_DATA_PATH = 'data/interim/player_match_stats.csv'  # CHANGED to .csv
+    INTERIM_DATA_PATH = 'data/interim/player_match_stats.csv'  
     
     logging.info(f"Starting T20-only data preprocessing with gender tracking...")
     process_all_matches(RAW_DATA_DIR, INTERIM_DATA_PATH)

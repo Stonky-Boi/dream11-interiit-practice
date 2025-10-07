@@ -56,7 +56,6 @@ class ModelPredictor:
         return self.model.predict(input_data)
     
     def evaluate_on_test_data(self, test_data, n_samples=20):
-        """Evaluate model on test data - compare predictions vs actual."""
         logging.info("\n" + "="*80)
         logging.info("MODEL EVALUATION ON TEST DATA")
         logging.info("="*80)
@@ -109,7 +108,6 @@ class ModelPredictor:
         return results
     
     def explain_prediction(self, input_data, player_idx=0):
-        """Generate SHAP explanation for a single prediction."""
         if self.features is not None:
             input_data_filtered = input_data[self.features]
         else:
@@ -133,10 +131,8 @@ class ModelPredictor:
                                 budget=100, max_players=11,
                                 min_wk=1, min_bat=1, min_bowl=1, min_ar=1,
                                 max_from_one_team=7):
-        """Recommend fantasy team with user-friendly, stat-backed explainability."""
         
         def generate_player_rationale(player, role):
-            """Generate concise, stat-backed rationale."""
             parts = []
             
             # Recent form with stats
@@ -174,7 +170,6 @@ class ModelPredictor:
             
             return " • ".join(parts) if parts else f"Predicted: {player['predicted_points']:.1f} pts"
         
-        # ===== MAIN FUNCTION =====
         print("\n")
         print("┌" + "─"*98 + "┐")
         print("│" + " "*20 + "DREAM11 T20 FANTASY TEAM BUILDER" + " "*46 + "│")
@@ -214,18 +209,12 @@ class ModelPredictor:
         predictions = self.predict(all_players)
         all_players['predicted_points'] = predictions
         
-# Cost calculation: 6.5 to 9.0 credits, rounded to nearest 0.5
         if 'cost' not in all_players.columns:
-            # Calculate raw cost (6.5 to 9.0 range)
             raw_cost = 6.5 + (all_players['predicted_points'] / all_players['predicted_points'].quantile(0.95)) * 2.5
             raw_cost = raw_cost.clip(6.5, 9.0)
             
-            # Smart rounding function
             def smart_round(cost):
-                """
-                Round to nearest 0.5 increment:
-                6.5, 7.0, 7.5, 8.0, 8.5, 9.0
-                """
+                
                 return round(cost * 2) / 2
             
             all_players['cost'] = raw_cost.apply(smart_round)
@@ -251,7 +240,6 @@ class ModelPredictor:
         
         all_players = all_players.sort_values('predicted_points', ascending=False).reset_index(drop=True)
         
-        # ===== SHOW TOP PLAYERS BY ROLE =====
         print("📊 TOP PERFORMERS BY ROLE")
         print("="*100)
         
@@ -280,7 +268,6 @@ class ModelPredictor:
         
         print("\n" + "="*100 + "\n")
         
-        # ===== TEAM SELECTION =====
         print("🎯 BUILDING YOUR DREAM TEAM")
         print("="*100)
         print(f"💰 Budget: {budget} credits │ 👥 Players: {max_players} │ ⚖️ Max from one team: {max_from_one_team}")
@@ -460,7 +447,6 @@ def get_match_squads(df, team1_name, team2_name, gender='male', lookback_days=36
         df = df[df['gender'] == gender].copy()
         logging.info(f"Filtering for {gender} cricket")
     
-    # CRITICAL FIX: Convert date to datetime
     if 'date' in df.columns:
         df['date'] = pd.to_datetime(df['date'])
     
@@ -512,7 +498,7 @@ if __name__ == '__main__':
     try:
         predictor = ModelPredictor(model_path=MODEL_PATH)
         
-        # CRITICAL FIX: Load CSV with date parsing
+        # Load CSV with date parsing
         df = pd.read_csv(PROCESSED_DATA_PATH, parse_dates=['date'])
         
         # Filter T20 only

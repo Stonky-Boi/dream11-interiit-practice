@@ -33,7 +33,7 @@ def infer_player_roles(raw_data_dir):
         
         info = data.get('info', {})
         
-        # CRITICAL: Filter for T20 only
+        # Filter for T20 only
         match_type = info.get('match_type', '').lower()
         match_type_number = info.get('match_type_number', None)
         

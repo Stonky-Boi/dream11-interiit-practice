@@ -82,7 +82,6 @@ def calculate_fantasy_points(df):
 
 
 def create_rolling_features(df):
-    """Enhanced rolling features."""
     logging.info("Creating rolling features...")
     
     df['date'] = pd.to_datetime(df['date'])
@@ -132,7 +131,6 @@ def create_rolling_features(df):
 
 
 def create_venue_features(df):
-    """Venue-based features."""
     logging.info("Creating venue features...")
     
     venue_avg = df.groupby(['player', 'venue'])['fantasy_points'].mean().reset_index()
@@ -149,7 +147,6 @@ def create_venue_features(df):
 
 
 def create_contextual_features(df):
-    """Match frequency and experience features."""
     logging.info("Creating contextual features...")
     
     df = df.sort_values(by=['player', 'date']).reset_index(drop=True)
@@ -162,7 +159,6 @@ def create_contextual_features(df):
 
 
 def create_categorical_encodings(df):
-    """Encode categorical variables."""
     logging.info("Creating categorical encodings...")
     
     if 'venue' in df.columns:
@@ -185,16 +181,16 @@ def create_categorical_encodings(df):
 
 
 if __name__ == '__main__':
-    INTERIM_DATA_PATH = 'data/interim/player_match_stats.csv'  # CHANGED to .csv
-    PROCESSED_DATA_PATH = 'data/processed/final_model_data.csv'  # CHANGED to .csv
+    INTERIM_DATA_PATH = 'data/interim/player_match_stats.csv'  
+    PROCESSED_DATA_PATH = 'data/processed/final_model_data.csv'  
     
     interim_path = Path(INTERIM_DATA_PATH)
     if not interim_path.exists():
         logging.error(f"{INTERIM_DATA_PATH} not found.")
     else:
-        df = pd.read_csv(interim_path)  # CHANGED to read_csv
+        df = pd.read_csv(interim_path)  
         
-        # FILTER BY GENDER (optional - set to 'male' or 'female' or comment out)
+        # FILTER BY GENDER (optional - set to 'male' or 'female')
         if 'gender' in df.columns:
             df = df[df['gender'] == 'male'].copy()  # Change to 'female' if needed
             logging.info(f"Filtered for male cricket: {len(df)} records")
@@ -207,6 +203,6 @@ if __name__ == '__main__':
         
         processed_path = Path(PROCESSED_DATA_PATH)
         processed_path.parent.mkdir(parents=True, exist_ok=True)
-        df.to_csv(processed_path, index=False)  # CHANGED to to_csv
+        df.to_csv(processed_path, index=False)  
         
         logging.info(f"Feature engineering complete. Saved to {processed_path}")
