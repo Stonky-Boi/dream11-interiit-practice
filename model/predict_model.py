@@ -440,7 +440,7 @@ class ModelPredictor:
 
 
 
-def get_match_squads(df, team1_name, team2_name, gender='male', lookback_days=360):
+def get_match_squads(df, team1_name, team2_name, gender='male', lookback_days=180):
     """Extract recent player data for both teams WITH GENDER FILTER."""
     # Filter by gender first
     if 'gender' in df.columns:
@@ -482,7 +482,7 @@ if __name__ == '__main__':
     parser.add_argument('--gender', type=str, default='male',
                        choices=['male', 'female'],
                        help='Cricket gender (male or female)')
-    parser.add_argument('--lookback_days', type=int, default=720,
+    parser.add_argument('--lookback_days', type=int, default=180,
                        help='Consider players active in last N days')
     parser.add_argument('--evaluate', action='store_true',
                        help='Run evaluation mode (predict vs actual)')
