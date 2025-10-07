@@ -1,6 +1,5 @@
 venv/
-data/raw
-data/interim
+data/
 catboost_info/
 model_artifacts/
 __pycache__/
