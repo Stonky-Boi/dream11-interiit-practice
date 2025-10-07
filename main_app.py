@@ -1,59 +1,73 @@
+"""
+Main Application - Dream11 Inter-IIT Project
+Entry point for both Product UI and Model UI
+"""
+
 import streamlit as st
-from UI import product_ui, model_ui
 from pathlib import Path
-import pandas as pd
 import sys
 
 # Add project root to path
-project_root = Path(__file__).resolve().parent
-sys.path.append(str(project_root))
-from model.predict_model import ModelPredictor
+sys.path.append(str(Path(__file__).parent))
 
-# --- Page Configuration ---
-st.set_page_config(
-    page_title="Dream11 AI Suite",
-    page_icon="🏏",
-    layout="wide"
-)
+def main():
+    st.set_page_config(
+        page_title="Dream11 Team Builder",
+        page_icon="🏏",
+        layout="wide",
+        initial_sidebar_state="expanded"
+    )
+    
+    # Sidebar navigation
+    st.sidebar.title("🏏 Dream11 AI")
+    st.sidebar.markdown("### Navigation")
+    
+    page = st.sidebar.radio(
+        "Select Interface",
+        ["Product UI - Team Builder", "Model UI - Evaluation"],
+        label_visibility="collapsed"
+    )
+    
+    st.sidebar.markdown("---")
+    st.sidebar.markdown("### About")
+    st.sidebar.info("""
+    **Dream11 Inter-IIT Tech Meet 13.0**
+    
+    AI-powered fantasy cricket team builder using ensemble ML models.
+    
+    - **Product UI**: Generate optimal Dream11 teams
+    - **Model UI**: Train and evaluate models
+    """)
+    
+    st.sidebar.markdown("---")
+    st.sidebar.markdown("### Status")
+    
+    # Check if models exist
+    model_path = Path('model_artifacts/ProductUIModel_metadata.json')
+    if model_path.exists():
+        st.sidebar.success("✅ Models loaded")
+    else:
+        st.sidebar.warning("⚠️ No trained model found")
+        st.sidebar.info("Train a model using Model UI")
+    
+    # Check if data exists
+    data_path = Path('data/processed/training_data_2024-06-30.csv')
+    if data_path.exists():
+        st.sidebar.success("✅ Training data ready")
+    else:
+        st.sidebar.warning("⚠️ No training data found")
+        st.sidebar.info("Run data processing scripts")
+    
+    # Route to selected page
+    if page == "Product UI - Team Builder":
+        from UI.product_ui import ProductUI
+        ui = ProductUI()
+        ui.run()
+    
+    elif page == "Model UI - Evaluation":
+        from UI.model_ui import ModelUI
+        ui = ModelUI()
+        ui.run()
 
-# --- Resource Loading (cached for performance) ---
-@st.cache_resource
-def load_predictor(model_name="lightgbm"):
-    """Load and cache a specific model predictor."""
-    model_path = f'model_artifacts/{model_name}_model.joblib'
-    try:
-        return ModelPredictor(model_path)
-    except FileNotFoundError:
-        st.error(f"Model file not found at {model_path}. Please train the model first.")
-        return None
-
-@st.cache_data
-def load_data_and_roles():
-    """Load all necessary CSV data once and cache it."""
-    try:
-        # CHANGED: Read from CSV and parse the date column
-        data_df = pd.read_csv('data/processed/final_model_data.csv', parse_dates=['date'])
-        roles_df = pd.read_csv('data/processed/player_roles.csv')
-        return data_df, roles_df
-    except FileNotFoundError as e:
-        st.error(f"Failed to load data files: {e}. Please run the data pipeline first.")
-        return None, None
-
-# --- Main App Logic ---
-st.sidebar.title("Configuration")
-
-model_choice = st.sidebar.selectbox(
-    "Choose a Model",
-    ("lightgbm", "xgboost")
-)
-
-predictor = load_predictor(model_choice)
-data_df, roles_df = load_data_and_roles()
-
-if all(v is not None for v in [predictor, data_df, roles_df]):
-    st.sidebar.title("Navigation")
-    page = st.sidebar.radio("Go to", ["Team Recommender", "Model Evaluator"])
-    if page == "Team Recommender":
-        product_ui.show_page(predictor, data_df, roles_df)
-    elif page == "Model Evaluator":
-        model_ui.show_page(data_df, roles_df, model_choice)
+if __name__ == '__main__':
+    main()
