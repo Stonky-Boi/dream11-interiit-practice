@@ -5,18 +5,19 @@ from tqdm import tqdm
 from collections import defaultdict
 import logging
 
+# Configure logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
 def parse_match_json(file_path):
     """
-    Parse T20 matches only with gender field.
+    Parses a single Cricsheet JSON file - T20 MATCHES ONLY with GENDER field.
     """
     with open(file_path, 'r') as f:
         data = json.load(f)
     
     info = data.get('info', {})
     
-    # Filter T20 only
+    # CRITICAL: Filter for T20 format only
     match_type = info.get('match_type', '').lower()
     match_type_number = info.get('match_type_number', None)
     
@@ -27,12 +28,12 @@ def parse_match_json(file_path):
     if not is_t20:
         return []
     
-    match_id = file_path.stem
-    
     # CRITICAL: Extract gender
-    gender = info.get('gender', 'male')  # Default to male if not specified
+    gender = info.get('gender', 'male').lower()
     if gender not in ['male', 'female']:
-        gender = 'male'  # Normalize
+        gender = 'male'
+    
+    match_id = file_path.stem
     
     player_to_team = {}
     if 'players' in info:
@@ -108,7 +109,7 @@ def parse_match_json(file_path):
             'venue': info.get('venue', 'Unknown'),
             'city': info.get('city', 'Unknown'),
             'match_type': 'T20',
-            'gender': gender,  # ADD GENDER FIELD
+            'gender': gender,  # NEW: Gender field
             'runs_scored': stats['runs_scored'],
             'balls_faced': stats['balls_faced'],
             'fours': stats['fours'],
@@ -128,7 +129,7 @@ def parse_match_json(file_path):
 
 def process_all_matches(raw_data_dir, output_path):
     """
-    Process all T20 matches with gender tracking.
+    Process all T20 matches with gender tracking - SAVE AS CSV.
     """
     raw_path = Path(raw_data_dir)
     
@@ -158,7 +159,6 @@ def process_all_matches(raw_data_dir, output_path):
                 all_records.extend(records)
                 t20_matches += 1
                 
-                # Track gender
                 if records[0]['gender'] == 'male':
                     male_matches += 1
                 else:
@@ -179,9 +179,10 @@ def process_all_matches(raw_data_dir, output_path):
     df = df.dropna(subset=['date'])
     df = df.sort_values('date').reset_index(drop=True)
     
+    # CHANGED: Save as CSV instead of Parquet
     output_file = Path(output_path)
     output_file.parent.mkdir(parents=True, exist_ok=True)
-    df.to_parquet(output_file, index=False)
+    df.to_csv(output_file, index=False)
     
     logging.info(f"\n{'='*80}")
     logging.info("PROCESSING SUMMARY")
@@ -201,7 +202,7 @@ def process_all_matches(raw_data_dir, output_path):
 
 if __name__ == '__main__':
     RAW_DATA_DIR = 'data/raw/cricsheet_data'
-    INTERIM_DATA_PATH = 'data/interim/player_match_stats.parquet'
+    INTERIM_DATA_PATH = 'data/interim/player_match_stats.csv'  # CHANGED to .csv
     
     logging.info(f"Starting T20-only data preprocessing with gender tracking...")
     process_all_matches(RAW_DATA_DIR, INTERIM_DATA_PATH)

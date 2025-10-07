@@ -2,13 +2,13 @@ import pandas as pd
 import numpy as np
 import joblib
 import shap
-import matplotlib.pyplot as plt
 from pathlib import Path
 import logging
 import argparse
 from datetime import datetime, timedelta
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+
 
 class ModelPredictor:
     def __init__(self, model_path):
@@ -56,9 +56,7 @@ class ModelPredictor:
         return self.model.predict(input_data)
     
     def evaluate_on_test_data(self, test_data, n_samples=20):
-        
-        #Evaluate model on test data - compare predictions vs actual.
-        
+        """Evaluate model on test data - compare predictions vs actual."""
         logging.info("\n" + "="*80)
         logging.info("MODEL EVALUATION ON TEST DATA")
         logging.info("="*80)
@@ -68,7 +66,6 @@ class ModelPredictor:
             return
         
         sample_data = test_data.sample(n=min(n_samples, len(test_data)), random_state=42)
-        
         predictions = self.predict(sample_data)
         
         results = sample_data[['player', 'team', 'date', 'fantasy_points']].copy()
@@ -77,7 +74,6 @@ class ModelPredictor:
         results['Abs_Error'] = np.abs(results['Error'])
         results['Pct_Error'] = (results['Abs_Error'] / (results['fantasy_points'] + 1)) * 100
         
-        # Calculate metrics
         rmse = np.sqrt((results['Error']**2).mean())
         mae = results['Abs_Error'].mean()
         r2 = 1 - (results['Error']**2).sum() / ((results['fantasy_points'] - results['fantasy_points'].mean())**2).sum()
@@ -97,7 +93,6 @@ class ModelPredictor:
         print(f"MAPE: {mape:.1f}%")
         print("="*80)
         
-        # Show best and worst predictions
         print("\n" + "="*80)
         print("BEST PREDICTIONS (smallest error):")
         print("="*80)
@@ -114,7 +109,7 @@ class ModelPredictor:
         return results
     
     def explain_prediction(self, input_data, player_idx=0):
-
+        """Generate SHAP explanation for a single prediction."""
         if self.features is not None:
             input_data_filtered = input_data[self.features]
         else:
@@ -135,26 +130,70 @@ class ModelPredictor:
         return explanation
     
     def recommend_team_for_match(self, team1_players, team2_players, 
-                                 budget=100, max_players=11,
-                                 min_wk=1, min_bat=1, min_bowl=1, min_ar=1,
-                                 max_from_one_team=7):
-    
-        logging.info("\n" + "="*80)
-        logging.info("GENERATING FANTASY TEAM FOR MATCH")
-        logging.info("="*80)
+                                budget=100, max_players=11,
+                                min_wk=1, min_bat=1, min_bowl=1, min_ar=1,
+                                max_from_one_team=7):
+        """Recommend fantasy team with user-friendly, stat-backed explainability."""
+        
+        def generate_player_rationale(player, role):
+            """Generate concise, stat-backed rationale."""
+            parts = []
+            
+            # Recent form with stats
+            if player['recent_form'] > 0 and player['avg_last_10'] > 0:
+                form_pct = ((player['recent_form'] - player['avg_last_10']) / player['avg_last_10']) * 100
+                if form_pct > 15:
+                    parts.append(f"🔥 Hot Form: L5 avg {player['recent_form']:.1f} vs L10 avg {player['avg_last_10']:.1f} (+{form_pct:.0f}%)")
+                elif form_pct > 5:
+                    parts.append(f"📈 Improving: L5 avg {player['recent_form']:.1f} vs L10 avg {player['avg_last_10']:.1f} (+{form_pct:.0f}%)")
+                elif form_pct < -15:
+                    parts.append(f"📉 Declining: L5 avg {player['recent_form']:.1f} vs L10 avg {player['avg_last_10']:.1f} ({form_pct:.0f}%)")
+                else:
+                    parts.append(f"✓ Stable: L5 avg {player['recent_form']:.1f}")
+            
+            # Consistency
+            if player['consistency'] > 0:
+                cons_pct = min(player['consistency'] * 100, 100)
+                if cons_pct > 70:
+                    parts.append(f"💎 Consistency: {cons_pct:.0f}%")
+                elif cons_pct > 50:
+                    parts.append(f"✓ Consistency: {cons_pct:.0f}%")
+            
+            # Role-specific
+            if role in ['BAT', 'AR'] and 'strike_rate' in player and player['strike_rate'] > 0:
+                if player['strike_rate'] > 145:
+                    parts.append(f"⚡ Explosive: SR {player['strike_rate']:.0f}")
+                elif player['strike_rate'] > 125:
+                    parts.append(f"🎯 Aggressive: SR {player['strike_rate']:.0f}")
+            
+            if role in ['BOWL', 'AR'] and 'economy_rate' in player and player['economy_rate'] > 0:
+                if player['economy_rate'] < 7:
+                    parts.append(f"🛡️ Economical: ER {player['economy_rate']:.1f}")
+                if 'roll_wickets_5' in player and player['roll_wickets_5'] > 0.8:
+                    parts.append(f"🎯 Wicket-taker: {player['roll_wickets_5']:.1f} wkts/match")
+            
+            return " • ".join(parts) if parts else f"Predicted: {player['predicted_points']:.1f} pts"
+        
+        # ===== MAIN FUNCTION =====
+        print("\n")
+        print("┌" + "─"*98 + "┐")
+        print("│" + " "*20 + "DREAM11 T20 FANTASY TEAM BUILDER" + " "*46 + "│")
+        print("└" + "─"*98 + "┘")
+        print()
         
         all_players = pd.concat([team1_players, team2_players], ignore_index=True)
         
         if all_players.empty:
-            logging.error("No players provided!")
+            print("❌ Error: No players found!")
             return pd.DataFrame()
         
         team1_name = team1_players['team'].iloc[0] if not team1_players.empty else 'Team1'
         team2_name = team2_players['team'].iloc[0] if not team2_players.empty else 'Team2'
         
-        logging.info(f"Match: {team1_name} vs {team2_name}")
-        logging.info(f"{team1_name}: {len(team1_players)} players")
-        logging.info(f"{team2_name}: {len(team2_players)} players")
+        print(f"📋 MATCH: {team1_name} vs {team2_name}")
+        print(f"👥 Available Players: {team1_name} ({len(team1_players)}) | {team2_name} ({len(team2_players)})")
+        print("─"*100)
+        print()
         
         # Load roles
         roles_path = Path('data/processed/player_roles.csv')
@@ -162,48 +201,110 @@ class ModelPredictor:
             roles_df = pd.read_csv(roles_path)
             all_players = all_players.merge(roles_df[['player', 'role']], on='player', how='left')
         else:
-            logging.error(f"Player roles not found at {roles_path}")
+            print("❌ Error: Player roles file not found!")
             return pd.DataFrame()
         
         all_players = all_players[all_players['role'].notna()].copy()
         
         if all_players.empty:
-            logging.error("No players with roles!")
+            print("❌ Error: No players with assigned roles!")
             return pd.DataFrame()
         
+        # Predictions
         predictions = self.predict(all_players)
         all_players['predicted_points'] = predictions
         
-        # Assign costs
+# Cost calculation: 6.5 to 9.0 credits, rounded to nearest 0.5
         if 'cost' not in all_players.columns:
-            all_players['cost'] = 7.5 + (all_players['predicted_points'] / all_players['predicted_points'].quantile(0.95)) * 3.5
-            all_players['cost'] = all_players['cost'].clip(7.5, 11.0).round(1)
-        
+            # Calculate raw cost (6.5 to 9.0 range)
+            raw_cost = 6.5 + (all_players['predicted_points'] / all_players['predicted_points'].quantile(0.95)) * 2.5
+            raw_cost = raw_cost.clip(6.5, 9.0)
+            
+            # Smart rounding function
+            def smart_round(cost):
+                """
+                Round to nearest 0.5 increment:
+                6.5, 7.0, 7.5, 8.0, 8.5, 9.0
+                """
+                return round(cost * 2) / 2
+            
+            all_players['cost'] = raw_cost.apply(smart_round)
+
+        # Calculate value (points per credit) right after cost
         all_players['value'] = all_players['predicted_points'] / all_players['cost']
-        all_players = all_players.sort_values('value', ascending=False).reset_index(drop=True)
+
         
-        # Show available players
-        logging.info(f"\nAVAILABLE PLAYERS BY ROLE:")
-        for role in ['WK', 'BAT', 'BOWL', 'AR']:
-            role_players = all_players[all_players['role'] == role]
-            if len(role_players) > 0:
-                logging.info(f"\n{role} ({len(role_players)} total):")
-                logging.info(f"  {team1_name}: {len(role_players[role_players['team'] == team1_name])}")
-                logging.info(f"  {team2_name}: {len(role_players[role_players['team'] == team2_name])}")
+        # Extract features
+        feature_mapping = {
+            'recent_form': 'weighted_fp_5',
+            'avg_last_5': 'roll_fantasy_points_5',
+            'avg_last_10': 'roll_fantasy_points_10',
+            'consistency': 'consistency_score',
+            'strike_rate': 'strike_rate',
+            'economy_rate': 'economy_rate',
+            'roll_wickets_5': 'roll_wickets_5',
+            'roll_runs_scored_5': 'roll_runs_scored_5'
+        }
         
-        # Team selection
+        for key, col in feature_mapping.items():
+            all_players[key] = all_players[col] if col in all_players.columns else 0
+        
+        all_players = all_players.sort_values('predicted_points', ascending=False).reset_index(drop=True)
+        
+        # ===== SHOW TOP PLAYERS BY ROLE =====
+        print("📊 TOP PERFORMERS BY ROLE")
+        print("="*100)
+        
+        for role in ['WK', 'BAT', 'AR', 'BOWL']:
+            role_players = all_players[all_players['role'] == role].head(10)
+            
+            if len(role_players) == 0:
+                continue
+            
+            role_names = {'WK': 'Wicket-Keeper', 'BAT': 'Batsman', 'AR': 'All-Rounder', 'BOWL': 'Bowler'}
+            print(f"\n[{role}] {role_names[role]}")
+            print("─"*100)
+            
+            for idx, p in role_players.iterrows():
+                form_emoji = ""
+                if p['recent_form'] > 0 and p['avg_last_10'] > 0:
+                    form_change = ((p['recent_form'] - p['avg_last_10']) / p['avg_last_10']) * 100
+                    if form_change > 15:
+                        form_emoji = "🔥"
+                    elif form_change > 5:
+                        form_emoji = "📈"
+                    elif form_change < -15:
+                        form_emoji = "📉"
+                
+                print(f"   {p['player']:<28} ({p['team']:<15}) │ {p['predicted_points']:>5.1f} pts │ {p['cost']:>4.1f} cr │ {form_emoji}")
+        
+        print("\n" + "="*100 + "\n")
+        
+        # ===== TEAM SELECTION =====
+        print("🎯 BUILDING YOUR DREAM TEAM")
+        print("="*100)
+        print(f"💰 Budget: {budget} credits │ 👥 Players: {max_players} │ ⚖️ Max from one team: {max_from_one_team}")
+        print(f"📋 Requirements: {min_wk} WK, {min_bat} BAT, {min_ar} AR, {min_bowl} BOWL")
+        print("="*100)
+        print()
+        
         selected_team = []
         remaining_budget = budget
         remaining_slots = max_players
-        
         role_requirements = {'WK': min_wk, 'BAT': min_bat, 'BOWL': min_bowl, 'AR': min_ar}
         role_selected = {'WK': 0, 'BAT': 0, 'BOWL': 0, 'AR': 0}
         team_counts = {team1_name: 0, team2_name: 0}
+        selection_log = []
+        rejection_log = []
         
-        logging.info(f"\nPHASE 1: Filling minimum role requirements")
+        all_players_sorted = all_players.sort_values('value', ascending=False).reset_index(drop=True)
         
+        print("STEP 1: Filling Required Roles")
+        print("─"*100)
+        
+        # Phase 1: Fill requirements
         for role, min_count in role_requirements.items():
-            role_players = all_players[all_players['role'] == role].copy()
+            role_players = all_players_sorted[all_players_sorted['role'] == role].copy()
             
             for _, player in role_players.iterrows():
                 if role_selected[role] >= min_count:
@@ -212,78 +313,156 @@ class ModelPredictor:
                 player_team = player['team']
                 
                 if team_counts.get(player_team, 0) >= max_from_one_team:
+                    rejection_log.append({'player': player['player'], 'reason': 'Team quota full', 
+                                        'predicted_points': player['predicted_points'], 'cost': player['cost']})
                     continue
                 
-                if remaining_budget >= player['cost'] and remaining_slots > 0:
-                    selected_team.append(player.to_dict())
-                    remaining_budget -= player['cost']
-                    remaining_slots -= 1
-                    role_selected[role] += 1
-                    team_counts[player_team] = team_counts.get(player_team, 0) + 1
-                    
-                    logging.info(f"  ✓ {player['player']} ({role}, {player_team}) - "
-                               f"{player['predicted_points']:.1f} pts, {player['cost']} cr")
+                if remaining_budget < player['cost']:
+                    rejection_log.append({'player': player['player'], 'reason': f'Over budget (need {player["cost"]:.1f}cr)', 
+                                        'predicted_points': player['predicted_points'], 'cost': player['cost']})
+                    continue
+                
+                if remaining_slots <= 0:
+                    break
+                
+                rationale = generate_player_rationale(player, role)
+                
+                selected_team.append(player.to_dict())
+                remaining_budget -= player['cost']
+                remaining_slots -= 1
+                role_selected[role] += 1
+                team_counts[player_team] = team_counts.get(player_team, 0) + 1
+                
+                print(f"\n✓ [{role}] {player['player']:<25} │ {player_team:<12} │ {player['predicted_points']:>5.1f} pts │ {player['cost']:>4.1f} cr")
+                print(f"    {rationale}")
+                
+                selection_log.append({
+                    'player': player['player'],
+                    'team': player_team,
+                    'role': role,
+                    'predicted_points': player['predicted_points'],
+                    'cost': player['cost'],
+                    'rationale': rationale
+                })
         
         unmet = [role for role, count in role_selected.items() if count < role_requirements[role]]
-        
         if unmet:
-            logging.error(f"\nFailed to meet requirements for: {unmet}")
-            return pd.DataFrame(selected_team) if selected_team else pd.DataFrame()
+            print(f"\n❌ Cannot satisfy requirements for: {', '.join(unmet)}")
+            return pd.DataFrame()
         
-        logging.info(f"\nPHASE 2: Filling remaining {remaining_slots} slots")
-        
-        selected_players = [p['player'] for p in selected_team]
-        
-        for _, player in all_players.iterrows():
-            if remaining_slots == 0:
-                break
+        # Phase 2: Optimize
+        if remaining_slots > 0:
+            print(f"\n\nSTEP 2: Optimizing Remaining {remaining_slots} Slots")
+            print("─"*100)
             
-            if player['player'] not in selected_players:
+            selected_players = [p['player'] for p in selected_team]
+            
+            for _, player in all_players_sorted.iterrows():
+                if remaining_slots == 0:
+                    break
+                
+                if player['player'] in selected_players:
+                    continue
+                
                 player_team = player['team']
                 
                 if team_counts.get(player_team, 0) >= max_from_one_team:
+                    rejection_log.append({'player': player['player'], 'reason': 'Team quota full',
+                                        'predicted_points': player['predicted_points'], 'cost': player['cost']})
                     continue
                 
-                if remaining_budget >= player['cost']:
-                    selected_team.append(player.to_dict())
-                    remaining_budget -= player['cost']
-                    remaining_slots -= 1
-                    role_selected[player['role']] += 1
-                    team_counts[player_team] = team_counts.get(player_team, 0) + 1
-                    
-                    logging.info(f"  ✓ {player['player']} ({player['role']}, {player_team}) - "
-                               f"{player['predicted_points']:.1f} pts, {player['cost']} cr")
+                if remaining_budget < player['cost']:
+                    rejection_log.append({'player': player['player'], 'reason': f'Over budget (need {player["cost"]:.1f}cr)',
+                                        'predicted_points': player['predicted_points'], 'cost': player['cost']})
+                    continue
+                
+                rationale = generate_player_rationale(player, player['role'])
+                
+                selected_team.append(player.to_dict())
+                remaining_budget -= player['cost']
+                remaining_slots -= 1
+                role_selected[player['role']] += 1
+                team_counts[player_team] = team_counts.get(player_team, 0) + 1
+                
+                print(f"\n✓ [{player['role']}] {player['player']:<25} │ {player_team:<12} │ {player['predicted_points']:>5.1f} pts │ {player['cost']:>4.1f} cr")
+                print(f"    {rationale}")
+                
+                selection_log.append({
+                    'player': player['player'],
+                    'team': player_team,
+                    'role': player['role'],
+                    'predicted_points': player['predicted_points'],
+                    'cost': player['cost'],
+                    'rationale': rationale
+                })
         
         team_df = pd.DataFrame(selected_team)
         
-        if not team_df.empty:
-            logging.info(f"\n{'='*80}")
-            logging.info("TEAM SUMMARY")
-            logging.info(f"{'='*80}")
-            logging.info(f"Players: {len(team_df)}/{max_players}")
-            logging.info(f"Budget: {budget - remaining_budget:.1f}/{budget}")
-            logging.info(f"Expected points: {team_df['predicted_points'].sum():.1f}")
-            logging.info(f"\nBy role: {dict(team_df['role'].value_counts())}")
-            logging.info(f"By team: {dict(team_df['team'].value_counts())}")
+        if team_df.empty:
+            print("\n❌ Team selection failed!")
+            return team_df
+        
+        # ===== FINAL TEAM =====
+        print("\n\n")
+        print("┌" + "─"*98 + "┐")
+        print("│" + " "*35 + "YOUR DREAM TEAM" + " "*48 + "│")
+        print("└" + "─"*98 + "┘")
+        print()
+        
+        for idx, log in enumerate(selection_log, 1):
+            role_emoji = {'WK': '🧤', 'BAT': '🏏', 'AR': '⭐', 'BOWL': '🎯'}
+            print(f"{idx:>2}. {role_emoji.get(log['role'], '')} {log['player']:<25} │ {log['team']:<12} │ {log['predicted_points']:>5.1f} pts │ {log['cost']:>4.1f} cr")
+        
+        print("\n" + "─"*100)
+        print("📊 TEAM SUMMARY")
+        print("─"*100)
+        print(f"👥 Players: {len(team_df)}/{max_players}")
+        print(f"💰 Budget Used: {budget - remaining_budget:.1f}/{budget} cr ({(budget-remaining_budget)/budget*100:.1f}%)")
+        print(f"⭐ Expected Points: {team_df['predicted_points'].sum():.1f}")
+        print(f"📈 Average per Player: {team_df['predicted_points'].mean():.1f} pts")
+        
+        print(f"\n🎯 Role Split: ", end="")
+        print(" | ".join([f"{role}: {count}" for role, count in sorted(team_df['role'].value_counts().items())]))
+        
+        print(f"⚖️ Team Split: ", end="")
+        for team, count in sorted(team_df['team'].value_counts().items()):
+            print(f"{team}: {count} ({count/len(team_df)*100:.0f}%)", end=" | ")
+        print()
+        
+        print("\n👑 CAPTAIN RECOMMENDATIONS")
+        print("─"*100)
+        top_3 = team_df.nlargest(3, 'predicted_points')
+        for idx, (_, row) in enumerate(top_3.iterrows(), 1):
+            badge = "👑 Captain" if idx == 1 else ("🥈 Vice-Captain" if idx == 2 else "🥉 Alternative")
+            print(f"{badge:20s}: {row['player']:<25} │ {row['predicted_points']:>5.1f} pts")
+        
+        if rejection_log:
+            print("\n❌ NOTABLE EXCLUSIONS")
+            print("─"*100)
+            rejection_df = pd.DataFrame(rejection_log).drop_duplicates(subset=['player'])
+            for _, rej in rejection_df.nlargest(5, 'predicted_points').iterrows():
+                print(f"   {rej['player']:<25} │ {rej['predicted_points']:>5.1f} pts │ {rej['cost']:>4.1f} cr │ {rej['reason']}")
+        
+        print("\n" + "="*100)
+        print("✅ Team selection complete!")
+        print("="*100 + "\n")
         
         return team_df
 
 
-def get_match_squads(df, team1_name, team2_name, gender='male', lookback_days=180):
-    """
-    Extract recent player data for both teams WITH GENDER FILTER.
-    
-    Args:
-        df: Full dataset
-        team1_name: Team 1 name
-        team2_name: Team 2 name
-        gender: 'male' or 'female' (default: 'male')
-        lookback_days: Lookback period
-    """
-    # CRITICAL: Filter by gender first
+
+
+
+def get_match_squads(df, team1_name, team2_name, gender='male', lookback_days=360):
+    """Extract recent player data for both teams WITH GENDER FILTER."""
+    # Filter by gender first
     if 'gender' in df.columns:
         df = df[df['gender'] == gender].copy()
         logging.info(f"Filtering for {gender} cricket")
+    
+    # CRITICAL FIX: Convert date to datetime
+    if 'date' in df.columns:
+        df['date'] = pd.to_datetime(df['date'])
     
     team1_data = df[df['team'] == team1_name].copy()
     team2_data = df[df['team'] == team2_name].copy()
@@ -291,6 +470,7 @@ def get_match_squads(df, team1_name, team2_name, gender='male', lookback_days=18
     if team1_data.empty or team2_data.empty:
         return pd.DataFrame(), pd.DataFrame()
     
+    # Filter by lookback period
     if 'date' in df.columns:
         cutoff = df['date'].max() - timedelta(days=lookback_days)
         team1_data = team1_data[team1_data['date'] >= cutoff]
@@ -305,29 +485,35 @@ def get_match_squads(df, team1_name, team2_name, gender='male', lookback_days=18
     return team1_players, team2_players
 
 
-
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description="Fantasy Cricket Model Predictor")
     parser.add_argument('--model_type', type=str, default='lightgbm', 
                        choices=['lightgbm', 'xgboost'])
-    parser.add_argument('--team1', type=str, default=None)
-    parser.add_argument('--team2', type=str, default=None)
+    parser.add_argument('--team1', type=str, default=None,
+                       help='Team 1 name (for match prediction mode)')
+    parser.add_argument('--team2', type=str, default=None,
+                       help='Team 2 name (for match prediction mode)')
     parser.add_argument('--gender', type=str, default='male',
                        choices=['male', 'female'],
                        help='Cricket gender (male or female)')
-    parser.add_argument('--lookback_days', type=int, default=180)
-    parser.add_argument('--evaluate', action='store_true')
-    parser.add_argument('--n_samples', type=int, default=20)
+    parser.add_argument('--lookback_days', type=int, default=720,
+                       help='Consider players active in last N days')
+    parser.add_argument('--evaluate', action='store_true',
+                       help='Run evaluation mode (predict vs actual)')
+    parser.add_argument('--n_samples', type=int, default=20,
+                       help='Number of samples for evaluation')
     
     args = parser.parse_args()
     
-    MODEL_PATH = f'model_artifacts/{args.model_type}_model.joblib'
-    PROCESSED_DATA_PATH = 'data/processed/final_model_data.parquet'
+    MODEL_PATH = f'model_artifacts/{args.model_type}_{args.gender}_model.joblib'
+    PROCESSED_DATA_PATH = 'data/processed/final_model_data.csv'
     TRAINING_CUTOFF_DATE = '2024-06-30'
     
     try:
         predictor = ModelPredictor(model_path=MODEL_PATH)
-        df = pd.read_parquet(PROCESSED_DATA_PATH)
+        
+        # CRITICAL FIX: Load CSV with date parsing
+        df = pd.read_csv(PROCESSED_DATA_PATH, parse_dates=['date'])
         
         # Filter T20 only
         if 'match_type' in df.columns:
@@ -345,6 +531,7 @@ if __name__ == '__main__':
             
             results = predictor.evaluate_on_test_data(test_data, n_samples=args.n_samples)
             
+            # Explain one prediction
             if not test_data.empty:
                 sample = test_data.sample(1, random_state=42)
                 explanation = predictor.explain_prediction(sample)

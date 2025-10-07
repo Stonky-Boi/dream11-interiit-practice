@@ -3,27 +3,19 @@ import numpy as np
 from pathlib import Path
 import logging
 
-# Configure logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
 def calculate_fantasy_points(df):
-
+    """Calculate fantasy points using OFFICIAL Dream11 T20 rules."""
     logging.info("Calculating fantasy points with OFFICIAL Dream11 T20 rules...")
     
-    # Initialize points column
     df['fantasy_points'] = 0.0
     
-    # ===== BATTING POINTS =====
-    # Base runs: +1 per run
+    # BATTING POINTS
     df['fantasy_points'] += df['runs_scored'] * 1
+    df['fantasy_points'] += df['fours'] * 4
+    df['fantasy_points'] += df['sixes'] * 6
     
-    # Boundary bonus: +4 TOTAL (run already counted, so we add the 4 runs scored as boundary)
-    # Dream11 gives +4 for boundary, +6 for six (these are TOTAL points including the runs)
-    # Since runs_scored already includes the 4 or 6, we ADD the bonus portion
-    df['fantasy_points'] += df['fours'] * 4  # +4 bonus per four
-    df['fantasy_points'] += df['sixes'] * 6  # +6 bonus per six
-    
-    # Milestone bonuses (exclusive - only highest applies)
     milestone_bonus = np.where(df['runs_scored'] >= 100, 16,
                       np.where(df['runs_scored'] >= 50, 8,
                       np.where(df['runs_scored'] >= 30, 4, 0)))
@@ -47,7 +39,7 @@ def calculate_fantasy_points(df):
     )
     df['fantasy_points'] += sr_bonus
     
-
+    # BOWLING POINTS
     df['fantasy_points'] += df['wickets'] * 30
     
     wicket_bonus = np.where(df['wickets'] >= 5, 16,
@@ -74,9 +66,8 @@ def calculate_fantasy_points(df):
     )
     df['fantasy_points'] += er_bonus
     
-
+    # FIELDING POINTS
     df['fantasy_points'] += df['catches'] * 8
-    
     catch_bonus = np.where(df['catches'] >= 3, 4, 0)
     df['fantasy_points'] += catch_bonus
     
@@ -86,14 +77,13 @@ def calculate_fantasy_points(df):
     if 'run_outs' in df.columns:
         df['fantasy_points'] += df['run_outs'] * 6
     
-    logging.info("Fantasy points calculation complete using OFFICIAL Dream11 T20 rules.")
-    logging.info(f"Average fantasy points per player-match: {df['fantasy_points'].mean():.2f}")
+    logging.info("Fantasy points calculation complete.")
     return df
 
 
 def create_rolling_features(df):
-   
-    logging.info("Creating enhanced rolling features...")
+    """Enhanced rolling features."""
+    logging.info("Creating rolling features...")
     
     df['date'] = pd.to_datetime(df['date'])
     df = df.sort_values(by=['player', 'date']).reset_index(drop=True)
@@ -108,15 +98,11 @@ def create_rolling_features(df):
             df[f'roll_{stat}_{w}'] = grouped[stat].transform(
                 lambda x: x.shift(1).rolling(w, min_periods=1).mean()
             ).fillna(0)
-    
-    # Add rolling standard deviation for consistency
-    for stat in stats_to_roll:
-        for w in windows:
+            
             df[f'roll_{stat}_{w}_std'] = grouped[stat].transform(
                 lambda x: x.shift(1).rolling(w, min_periods=1).std()
             ).fillna(0)
     
-    # Weighted rolling average (recent matches weighted more)
     def weighted_rolling_mean(series, window=5):
         weights = np.arange(1, window + 1)
         return series.shift(1).rolling(window, min_periods=1).apply(
@@ -128,7 +114,6 @@ def create_rolling_features(df):
         lambda x: weighted_rolling_mean(x, 5)
     ).fillna(0)
     
-    # Form trend (last 3 vs previous 3)
     df['form_trend'] = (
         df['roll_fantasy_points_3'] - 
         grouped['fantasy_points'].transform(
@@ -136,22 +121,20 @@ def create_rolling_features(df):
         )
     ).fillna(0)
     
-    # Consistency score
     df['consistency_score'] = np.where(
         df['roll_fantasy_points_5'] > 0,
         1 / (1 + df['roll_fantasy_points_5_std'] / (df['roll_fantasy_points_5'] + 0.1)),
         0
     )
     
-    logging.info("Enhanced rolling features created successfully.")
+    logging.info("Rolling features created.")
     return df
 
 
 def create_venue_features(df):
-    
+    """Venue-based features."""
     logging.info("Creating venue features...")
     
-    # Calculate player's average fantasy points at each venue
     venue_avg = df.groupby(['player', 'venue'])['fantasy_points'].mean().reset_index()
     venue_avg = venue_avg.rename(columns={'fantasy_points': 'venue_avg_fp'})
     
@@ -161,26 +144,25 @@ def create_venue_features(df):
         lambda x: x.shift(1)
     ).fillna(0)
     
-    logging.info("Venue features created successfully.")
+    logging.info("Venue features created.")
     return df
 
 
 def create_contextual_features(df):
-   
+    """Match frequency and experience features."""
     logging.info("Creating contextual features...")
     
     df = df.sort_values(by=['player', 'date']).reset_index(drop=True)
     
-    # Match count (experience)
     df['match_count'] = df.groupby('player').cumcount() + 1
-    
-    # Days since last match
     df['days_since_last_match'] = df.groupby('player')['date'].diff().dt.days.fillna(7)
     
-    logging.info("Contextual features created successfully.")
+    logging.info("Contextual features created.")
     return df
-def create_categorical_encodings(df):
 
+
+def create_categorical_encodings(df):
+    """Encode categorical variables."""
     logging.info("Creating categorical encodings...")
     
     if 'venue' in df.columns:
@@ -198,33 +180,24 @@ def create_categorical_encodings(df):
     else:
         df['city_encoded'] = 0
     
-    logging.info("Categorical encodings created successfully.")
+    logging.info("Categorical encodings created.")
     return df
 
+
 if __name__ == '__main__':
-    INTERIM_DATA_PATH = 'data/interim/player_match_stats.parquet'
-    PROCESSED_DATA_PATH = 'data/processed/final_model_data.parquet'
+    INTERIM_DATA_PATH = 'data/interim/player_match_stats.csv'  # CHANGED to .csv
+    PROCESSED_DATA_PATH = 'data/processed/final_model_data.csv'  # CHANGED to .csv
     
     interim_path = Path(INTERIM_DATA_PATH)
     if not interim_path.exists():
-        logging.error(f"{INTERIM_DATA_PATH} not found. Please run data_preprocessing.py first.")
+        logging.error(f"{INTERIM_DATA_PATH} not found.")
     else:
-        logging.info("Loading interim data...")
-        df = pd.read_parquet(interim_path)
+        df = pd.read_csv(interim_path)  # CHANGED to read_csv
         
-        # VERIFY T20 ONLY
-        if 'match_type' in df.columns:
-            non_t20 = df[df['match_type'] != 'T20']
-            if len(non_t20) > 0:
-                logging.warning(f"Found {len(non_t20)} non-T20 records! Filtering them out...")
-                df = df[df['match_type'] == 'T20'].copy()
-            
-            logging.info(f"Processing {len(df)} records from T20 matches only")
-            logging.info(f"Unique T20 matches: {df['match_id'].nunique()}")
-        else:
-            logging.warning("No match_type column found. Assuming all data is T20.")
-        
-        logging.info(f"Initial data shape: {df.shape}")
+        # FILTER BY GENDER (optional - set to 'male' or 'female' or comment out)
+        if 'gender' in df.columns:
+            df = df[df['gender'] == 'male'].copy()  # Change to 'female' if needed
+            logging.info(f"Filtered for male cricket: {len(df)} records")
         
         df = calculate_fantasy_points(df)
         df = create_rolling_features(df)
@@ -234,7 +207,6 @@ if __name__ == '__main__':
         
         processed_path = Path(PROCESSED_DATA_PATH)
         processed_path.parent.mkdir(parents=True, exist_ok=True)
-        df.to_parquet(processed_path, index=False)
+        df.to_csv(processed_path, index=False)  # CHANGED to to_csv
         
-        logging.info(f"Final data shape: {df.shape}")
-        logging.info(f"Feature engineering complete. Dataset saved to {processed_path}")
+        logging.info(f"Feature engineering complete. Saved to {processed_path}")
