@@ -9,6 +9,7 @@ import numpy as np
 from pathlib import Path
 import sys
 sys.path.append(str(Path(__file__).parent.parent))
+import json
 
 from model.train_model import Dream11ModelTrainer
 from model.predict_model import Dream11Predictor
@@ -456,6 +457,74 @@ class ModelUI:
                     st.success(f"Results ready for download: {filename}")
                 else:
                     st.error("No results generated")
+
+    def display_model_comparison(self, model_name):
+        """Display model comparison from training"""
+        comparison_path = self.model_artifacts_dir / f"{model_name}_model_comparison.json"
+        
+        if not comparison_path.exists():
+            st.warning("No model comparison data found")
+            return
+        
+        with open(comparison_path, 'r') as f:
+            comparison_data = json.load(f)
+        
+        st.markdown("### 📊 Model Performance Comparison")
+        
+        # Create comparison dataframe
+        models_data = []
+        for model_name_key, results in comparison_data['all_models'].items():
+            models_data.append({
+                'Model': model_name_key.replace('_', ' ').title(),
+                'Type': results['type'].title(),
+                'Train MAE': results['train_mae'],
+                'Val MAE': results['val_mae'],
+                'Val RMSE': results['val_rmse'],
+                'Val R²': results['val_r2']
+            })
+        
+        df_comparison = pd.DataFrame(models_data).sort_values('Val MAE')
+        
+        # Display table
+        st.dataframe(df_comparison, use_container_width=True)
+        
+        # Visualizations
+        col1, col2 = st.columns(2)
+        
+        with col1:
+            # MAE comparison
+            import plotly.express as px
+            fig_mae = px.bar(
+                df_comparison,
+                x='Model',
+                y='Val MAE',
+                color='Type',
+                title='Model Comparison - Validation MAE (Lower is Better)',
+                labels={'Val MAE': 'Validation MAE'},
+                color_discrete_map={'Baseline': '#FF6B6B', 'Ensemble': '#4ECDC4'}
+            )
+            fig_mae.update_layout(xaxis_tickangle=-45)
+            st.plotly_chart(fig_mae, use_container_width=True)
+        
+        with col2:
+            # R² comparison
+            fig_r2 = px.bar(
+                df_comparison,
+                x='Model',
+                y='Val R²',
+                color='Type',
+                title='Model Comparison - R² Score (Higher is Better)',
+                labels={'Val R²': 'R² Score'},
+                color_discrete_map={'Baseline': '#FF6B6B', 'Ensemble': '#4ECDC4'}
+            )
+            fig_r2.update_layout(xaxis_tickangle=-45)
+            st.plotly_chart(fig_r2, use_container_width=True)
+        
+        # Best model highlight
+        best_model = comparison_data['best_model']
+        best_mae = df_comparison[df_comparison['Model'] == best_model.replace('_', ' ').title()]['Val MAE'].values[0]
+        
+        st.success(f"🏆 Best Model: **{best_model.replace('_', ' ').title()}** (Val MAE: {best_mae:.2f})")
 
 def main():
     st.set_page_config(

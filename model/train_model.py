@@ -1,6 +1,6 @@
 """
 Model Training Script for Dream11 Fantasy Points Prediction
-Trains ensemble models using XGBoost, LightGBM, and CatBoost
+Trains ensemble models + baseline comparisons
 """
 
 import pandas as pd
@@ -11,6 +11,8 @@ import json
 from datetime import datetime
 from sklearn.model_selection import train_test_split
 from sklearn.metrics import mean_absolute_error, r2_score, mean_squared_error
+from sklearn.linear_model import Ridge, Lasso, LinearRegression
+from sklearn.ensemble import RandomForestRegressor, GradientBoostingRegressor
 import xgboost as xgb
 import lightgbm as lgb
 from catboost import CatBoostRegressor
@@ -30,9 +32,11 @@ class Dream11ModelTrainer:
         self.target_col = 'fantasy_points'
         self.categorical_features = ['role', 'match_type', 'gender']
         
-        # Models
+        # Models (main + baselines)
         self.models = {}
+        self.baseline_models = {}
         self.ensemble_weights = {}
+        self.all_results = {}
     
     def load_data(self, train_end_date='2024-06-30'):
         """Load training data with date filtering"""
@@ -54,7 +58,10 @@ class Dream11ModelTrainer:
         print(f"✓ Total samples: {len(self.df):,}")
         print(f"✓ Filtered out (after cutoff): {filtered_count:,}")
         print(f"✓ Date range: {self.df['date'].min()} to {self.df['date'].max()}")
-        print(f"✓ Formats: {self.df['match_type'].value_counts().to_dict()}")
+        
+        # Show match type distribution
+        if 'match_type' in self.df.columns:
+            print(f"✓ Match types: {self.df['match_type'].value_counts().to_dict()}")
         
         # Verify no data leakage
         if self.df['date'].max() > train_end:
@@ -104,7 +111,7 @@ class Dream11ModelTrainer:
             # Toss features
             'won_toss', 'toss_bat',
             
-            # Categorical
+            # Categorical (includes match_type for ODI/T20 differentiation)
             'role', 'match_type', 'gender'
         ]
         
@@ -158,6 +165,63 @@ class Dream11ModelTrainer:
         
         return self.X_train, self.X_val, self.y_train, self.y_val
     
+    def train_baseline_models(self):
+        """Train baseline models for comparison"""
+        print("\n" + "=" * 70)
+        print("TRAINING BASELINE MODELS")
+        print("=" * 70)
+        
+        # Convert categorical to numeric for baseline models
+        X_train_numeric = self.X_train.copy()
+        X_val_numeric = self.X_val.copy()
+        
+        for cat_col in self.categorical_features:
+            if cat_col in X_train_numeric.columns:
+                X_train_numeric[cat_col] = X_train_numeric[cat_col].cat.codes
+                X_val_numeric[cat_col] = X_val_numeric[cat_col].cat.codes
+        
+        baseline_configs = {
+            'linear_regression': LinearRegression(),
+            'ridge': Ridge(alpha=1.0, random_state=42),
+            'lasso': Lasso(alpha=1.0, random_state=42),
+            'random_forest': RandomForestRegressor(n_estimators=100, max_depth=10, random_state=42, n_jobs=-1),
+            'gradient_boosting': GradientBoostingRegressor(n_estimators=100, max_depth=5, random_state=42)
+        }
+        
+        for name, model in baseline_configs.items():
+            print(f"\n[{name.upper().replace('_', ' ')}] Training...")
+            
+            model.fit(X_train_numeric, self.y_train)
+            
+            train_pred = model.predict(X_train_numeric)
+            val_pred = model.predict(X_val_numeric)
+            
+            train_mae = mean_absolute_error(self.y_train, train_pred)
+            val_mae = mean_absolute_error(self.y_val, val_pred)
+            val_r2 = r2_score(self.y_val, val_pred)
+            val_rmse = np.sqrt(mean_squared_error(self.y_val, val_pred))
+            
+            print(f"  Train MAE: {train_mae:.2f}")
+            print(f"  Val MAE:   {val_mae:.2f}")
+            print(f"  Val RMSE:  {val_rmse:.2f}")
+            print(f"  Val R²:    {val_r2:.4f}")
+            
+            self.baseline_models[name] = {
+                'model': model,
+                'val_mae': val_mae,
+                'val_rmse': val_rmse,
+                'val_r2': val_r2,
+                'train_mae': train_mae
+            }
+            
+            self.all_results[name] = {
+                'type': 'baseline',
+                'val_mae': val_mae,
+                'val_rmse': val_rmse,
+                'val_r2': val_r2,
+                'train_mae': train_mae
+            }
+    
     def train_xgboost(self):
         """Train XGBoost model"""
         print("\n" + "=" * 70)
@@ -204,7 +268,16 @@ class Dream11ModelTrainer:
             'val_mae': val_mae,
             'val_rmse': val_rmse,
             'val_r2': val_r2,
+            'train_mae': train_mae,
             'val_predictions': val_pred
+        }
+        
+        self.all_results['xgboost'] = {
+            'type': 'ensemble',
+            'val_mae': val_mae,
+            'val_rmse': val_rmse,
+            'val_r2': val_r2,
+            'train_mae': train_mae
         }
         
         return model
@@ -258,7 +331,16 @@ class Dream11ModelTrainer:
             'val_mae': val_mae,
             'val_rmse': val_rmse,
             'val_r2': val_r2,
+            'train_mae': train_mae,
             'val_predictions': val_pred
+        }
+        
+        self.all_results['lightgbm'] = {
+            'type': 'ensemble',
+            'val_mae': val_mae,
+            'val_rmse': val_rmse,
+            'val_r2': val_r2,
+            'train_mae': train_mae
         }
         
         return model
@@ -307,7 +389,16 @@ class Dream11ModelTrainer:
             'val_mae': val_mae,
             'val_rmse': val_rmse,
             'val_r2': val_r2,
+            'train_mae': train_mae,
             'val_predictions': val_pred
+        }
+        
+        self.all_results['catboost'] = {
+            'type': 'ensemble',
+            'val_mae': val_mae,
+            'val_rmse': val_rmse,
+            'val_r2': val_r2,
+            'train_mae': train_mae
         }
         
         return model
@@ -336,18 +427,65 @@ class Dream11ModelTrainer:
         ensemble_r2 = r2_score(self.y_val, ensemble_pred)
         ensemble_rmse = np.sqrt(mean_squared_error(self.y_val, ensemble_pred))
         
+        # Calculate train predictions for ensemble
+        ensemble_train_pred = np.zeros(len(self.y_train))
+        for name, model_dict in self.models.items():
+            train_pred = model_dict['model'].predict(self.X_train)
+            ensemble_train_pred += self.ensemble_weights[name] * train_pred
+        
+        ensemble_train_mae = mean_absolute_error(self.y_train, ensemble_train_pred)
+        
         print(f"\n{'='*70}")
         print("ENSEMBLE PERFORMANCE")
         print("=" * 70)
-        print(f"  MAE:  {ensemble_mae:.2f}")
-        print(f"  RMSE: {ensemble_rmse:.2f}")
-        print(f"  R²:   {ensemble_r2:.4f}")
+        print(f"  Train MAE: {ensemble_train_mae:.2f}")
+        print(f"  Val MAE:   {ensemble_mae:.2f}")
+        print(f"  Val RMSE:  {ensemble_rmse:.2f}")
+        print(f"  Val R²:    {ensemble_r2:.4f}")
         
         self.ensemble_mae = ensemble_mae
         self.ensemble_rmse = ensemble_rmse
         self.ensemble_r2 = ensemble_r2
+        self.ensemble_train_mae = ensemble_train_mae
+        
+        self.all_results['ensemble'] = {
+            'type': 'ensemble',
+            'val_mae': ensemble_mae,
+            'val_rmse': ensemble_rmse,
+            'val_r2': ensemble_r2,
+            'train_mae': ensemble_train_mae
+        }
         
         return ensemble_pred
+    
+    def compare_all_models(self):
+        """Generate comparison report of all models"""
+        print("\n" + "=" * 70)
+        print("MODEL COMPARISON SUMMARY")
+        print("=" * 70)
+        
+        # Sort by validation MAE
+        sorted_models = sorted(self.all_results.items(), key=lambda x: x[1]['val_mae'])
+        
+        print(f"\n{'Model':<20} {'Type':<12} {'Train MAE':<12} {'Val MAE':<12} {'Val RMSE':<12} {'Val R²':<10}")
+        print("-" * 90)
+        
+        for name, results in sorted_models:
+            print(f"{name:<20} {results['type']:<12} "
+                  f"{results['train_mae']:>10.2f}  "
+                  f"{results['val_mae']:>10.2f}  "
+                  f"{results['val_rmse']:>10.2f}  "
+                  f"{results['val_r2']:>10.4f}")
+        
+        best_model = sorted_models[0][0]
+        print(f"\n✓ Best Model: {best_model.upper()} (Val MAE: {sorted_models[0][1]['val_mae']:.2f})")
+        
+        # Calculate improvement over baseline
+        if 'linear_regression' in self.all_results:
+            baseline_mae = self.all_results['linear_regression']['val_mae']
+            ensemble_mae = self.all_results['ensemble']['val_mae']
+            improvement = ((baseline_mae - ensemble_mae) / baseline_mae) * 100
+            print(f"✓ Improvement over Linear Regression: {improvement:.1f}%")
     
     def save_models(self, model_name='ProductUIModel'):
         """Save trained models and metadata"""
@@ -355,17 +493,34 @@ class Dream11ModelTrainer:
         print("SAVING MODELS")
         print("=" * 70)
         
-        # Save individual models
+        # Save individual ensemble models
         for name, model_dict in self.models.items():
             model_path = self.model_dir / f"{model_name}_{name}.pkl"
             joblib.dump(model_dict['model'], model_path)
             print(f"✓ Saved {name:12s} -> {model_path.name}")
+        
+        # Save baseline models
+        for name, model_dict in self.baseline_models.items():
+            model_path = self.model_dir / f"{model_name}_baseline_{name}.pkl"
+            joblib.dump(model_dict['model'], model_path)
+        print(f"✓ Saved {len(self.baseline_models)} baseline models")
         
         # Save ensemble weights
         weights_path = self.model_dir / f"{model_name}_ensemble_weights.json"
         with open(weights_path, 'w') as f:
             json.dump(self.ensemble_weights, f, indent=2)
         print(f"✓ Saved ensemble weights -> {weights_path.name}")
+        
+        # Save complete comparison results
+        comparison_path = self.model_dir / f"{model_name}_model_comparison.json"
+        comparison_data = {
+            'all_models': self.all_results,
+            'best_model': min(self.all_results.items(), key=lambda x: x[1]['val_mae'])[0],
+            'training_date': datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+        }
+        with open(comparison_path, 'w') as f:
+            json.dump(comparison_data, f, indent=2)
+        print(f"✓ Saved model comparison -> {comparison_path.name}")
         
         # Save feature metadata
         metadata = {
@@ -409,13 +564,19 @@ class Dream11ModelTrainer:
         self.prepare_features()
         self.split_data()
         
-        # Train all models
+        # Train baseline models
+        self.train_baseline_models()
+        
+        # Train ensemble models
         self.train_xgboost()
         self.train_lightgbm()
         self.train_catboost()
         
         # Create ensemble
         self.create_ensemble()
+        
+        # Compare all models
+        self.compare_all_models()
         
         # Save models
         self.save_models(model_name)
