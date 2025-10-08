@@ -1,36 +1,39 @@
 """
 Product UI - Dream11 Team Recommendation Interface
-Interactive team builder with explainability features
+Works with 60+ feature set and aggregate stats
 """
 
 import streamlit as st
 import pandas as pd
+import numpy as np
 from pathlib import Path
 import sys
 sys.path.append(str(Path(__file__).parent.parent))
 
 from model.predict_model import Dream11Predictor
+import plotly.graph_objects as go
 import plotly.express as px
 from datetime import datetime
 import warnings
 warnings.filterwarnings('ignore')
 
-# Try to import gTTS, but make it optional
+# Try to import gTTS
 try:
     from gtts import gTTS
+    import tempfile
     GTTS_AVAILABLE = True
 except:
     GTTS_AVAILABLE = False
 
 class ProductUI:
-    """Product UI for team recommendations"""
+    """Product UI for Dream11 team recommendations"""
     
     def __init__(self):
         self.load_predictor()
-        self.load_data()
+        self.load_player_database()
     
     def load_predictor(self):
-        """Load the trained model"""
+        """Load the trained model predictor"""
         try:
             self.predictor = Dream11Predictor()
         except Exception as e:
@@ -38,64 +41,35 @@ class ProductUI:
             st.info("Please train the model first: python model/train_model.py")
             st.stop()
     
-    def load_data(self):
-        """Load historical player data"""
-        data_path = Path('data/processed/training_data_2024-06-30.csv')
-        if not data_path.exists():
+    def load_player_database(self):
+        """Load player database for team selection"""
+        training_data_path = Path('data/processed/training_data_2024-06-30.csv')
+        
+        if not training_data_path.exists():
             st.error("Training data not found. Please run feature engineering first.")
             st.stop()
         
-        self.player_data = pd.read_csv(data_path)
+        self.player_data = pd.read_csv(training_data_path)
         self.player_data['date'] = pd.to_datetime(self.player_data['date'])
+        
+        # Get unique teams and players
+        self.teams = sorted(self.player_data['team'].unique())
+        self.all_players = sorted(self.player_data['player'].unique())
+        
+        st.sidebar.success(f"✓ Loaded {len(self.all_players):,} players from {len(self.teams)} teams")
     
-    def get_latest_player_features(self, player_name):
-        """Get most recent features for a player"""
-        player_matches = self.player_data[self.player_data['player'] == player_name]
-        if len(player_matches) > 0:
-            return player_matches.sort_values('date').iloc[-1]
-        return None
-    
-    def get_squad_features(self, team1, team2, match_date=None):
-        """Get features for players from both teams"""
-        if match_date is None:
-            match_date = self.player_data['date'].max()
-        else:
-            match_date = pd.to_datetime(match_date)
-        
-        # Get recent players from both teams
-        recent_cutoff = match_date - pd.Timedelta(days=365)
-        
-        team1_players = self.player_data[
-            (self.player_data['team'] == team1) & 
-            (self.player_data['date'] >= recent_cutoff) &
-            (self.player_data['date'] <= match_date)
-        ]
-        
-        team2_players = self.player_data[
-            (self.player_data['team'] == team2) & 
-            (self.player_data['date'] >= recent_cutoff) &
-            (self.player_data['date'] <= match_date)
-        ]
-        
-        # Get latest stats for each player
-        team1_latest = team1_players.groupby('player').last().reset_index()
-        team2_latest = team2_players.groupby('player').last().reset_index()
-        
-        all_players = pd.concat([team1_latest, team2_latest], ignore_index=True)
-        
-        # Filter players with sufficient data
-        all_players = all_players[all_players['career_matches'] >= 5]
-        
-        return all_players
+    def get_team_players(self, team_name):
+        """Get players from a specific team"""
+        team_players = self.player_data[self.player_data['team'] == team_name]['player'].unique()
+        return sorted(team_players)
     
     def select_dream_team(self, predictions_df):
-        """Select best 11 players following Dream11 constraints"""
-        # Dream11 constraints
+        """
+        Select best 11 players following Dream11 constraints
+        """
         MIN_PLAYERS_PER_TEAM = 1
         MAX_PLAYERS_PER_TEAM = 7
         TEAM_SIZE = 11
-        
-        # Role constraints: 1-8 for each role category
         MIN_WK = 1
         MAX_WK = 4
         MIN_BAT = 1
@@ -107,311 +81,320 @@ class ProductUI:
         
         predictions_df = predictions_df.sort_values('predicted_fantasy_points', ascending=False).reset_index(drop=True)
         
-        # Get unique teams
-        teams = predictions_df['team'].unique()
+        teams = predictions_df['team'].unique() if 'team' in predictions_df.columns else []
+        
         if len(teams) < 2:
-            st.error("❌ Need players from both teams")
+            st.warning("Need players from both teams. Using top 11 players.")
             return predictions_df.head(TEAM_SIZE)
         
         team1, team2 = teams[0], teams[1]
         
-        # Separate by role
-        wk_players = predictions_df[predictions_df['role'] == 'Wicket-Keeper'].head(MAX_WK)
-        bat_players = predictions_df[predictions_df['role'] == 'Batsman'].head(MAX_BAT * 2)
-        bowl_players = predictions_df[predictions_df['role'] == 'Bowler'].head(MAX_BOWL * 2)
-        ar_players = predictions_df[predictions_df['role'] == 'All-Rounder'].head(MAX_AR * 2)
-        
-        # Ensure minimums are met
-        if len(wk_players) < MIN_WK:
-            st.error(f"❌ Need at least {MIN_WK} wicket-keeper(s), found {len(wk_players)}")
-            return predictions_df.head(TEAM_SIZE)
-        
-        # Greedy selection with constraint checking
+        # Greedy selection with constraints
         selected = []
         role_counts = {'Wicket-Keeper': 0, 'Batsman': 0, 'Bowler': 0, 'All-Rounder': 0}
         team_counts = {team1: 0, team2: 0}
         
-        # Priority order: Try to get at least minimum of each role first
         for idx, row in predictions_df.iterrows():
             if len(selected) >= TEAM_SIZE:
                 break
             
-            role = row['role']
-            team = row['team']
+            role = row.get('role', 'All-Rounder')
+            team = row.get('team', team1)
             
             # Check team constraint
             if team_counts.get(team, 0) >= MAX_PLAYERS_PER_TEAM:
                 continue
             
             # Check role constraints
-            if role == 'Wicket-Keeper':
-                if role_counts[role] >= MAX_WK:
-                    continue
-            elif role == 'Batsman':
-                if role_counts[role] >= MAX_BAT:
-                    continue
-            elif role == 'Bowler':
-                if role_counts[role] >= MAX_BOWL:
-                    continue
-            elif role == 'All-Rounder':
-                if role_counts[role] >= MAX_AR:
-                    continue
+            if role == 'Wicket-Keeper' and role_counts[role] >= MAX_WK:
+                continue
+            elif role == 'Batsman' and role_counts[role] >= MAX_BAT:
+                continue
+            elif role == 'Bowler' and role_counts[role] >= MAX_BOWL:
+                continue
+            elif role == 'All-Rounder' and role_counts[role] >= MAX_AR:
+                continue
             
             # Add player
             selected.append(idx)
             role_counts[role] += 1
             team_counts[team] = team_counts.get(team, 0) + 1
         
-        # Check if we have minimum constraints met
+        # Fill remaining spots if needed
         if len(selected) < TEAM_SIZE:
-            st.warning(f"⚠️ Could only select {len(selected)} players with constraints. Need {TEAM_SIZE}.")
-            # Fill remaining with best available
             remaining = predictions_df[~predictions_df.index.isin(selected)]
             for idx, row in remaining.iterrows():
                 if len(selected) >= TEAM_SIZE:
                     break
                 selected.append(idx)
-                role_counts[row['role']] += 1
-                team_counts[row['team']] = team_counts.get(row['team'], 0) + 1
-        
-        # Verify minimum role constraints
-        if role_counts['Wicket-Keeper'] < MIN_WK:
-            st.error(f"❌ Only {role_counts['Wicket-Keeper']} wicket-keeper(s). Need at least {MIN_WK}.")
-        if role_counts['Batsman'] < MIN_BAT:
-            st.warning(f"⚠️ Only {role_counts['Batsman']} batsman/batsmen. Recommended at least {MIN_BAT}.")
-        if role_counts['Bowler'] < MIN_BOWL:
-            st.warning(f"⚠️ Only {role_counts['Bowler']} bowler(s). Recommended at least {MIN_BOWL}.")
-        if role_counts['All-Rounder'] < MIN_AR:
-            st.warning(f"⚠️ Only {role_counts['All-Rounder']} all-rounder(s). Recommended at least {MIN_AR}.")
-        
-        # Verify team constraints
-        for team in [team1, team2]:
-            if team_counts.get(team, 0) < MIN_PLAYERS_PER_TEAM:
-                st.error(f"❌ Only {team_counts.get(team, 0)} player(s) from {team}. Need at least {MIN_PLAYERS_PER_TEAM}.")
         
         dream_team = predictions_df.loc[selected[:TEAM_SIZE]].copy()
         dream_team = dream_team.sort_values('predicted_fantasy_points', ascending=False).reset_index(drop=True)
         
+        # Validate constraints
+        final_role_counts = dream_team['role'].value_counts().to_dict()
+        
+        for role in ['Wicket-Keeper', 'Batsman', 'Bowler', 'All-Rounder']:
+            count = final_role_counts.get(role, 0)
+            if role == 'Wicket-Keeper' and count < MIN_WK:
+                st.warning(f"⚠️ Only {count} wicket-keeper(s). Minimum is {MIN_WK}.")
+        
         return dream_team
     
-    def explain_player_selection(self, player_row):
-        """Generate explanation for player selection"""
-        explanations = []
-        
-        # Recent form
-        recent_avg = player_row.get('avg_fantasy_points_last_5', 0)
-        if pd.notna(recent_avg):
-            explanations.append(f"📊 Recent form: Averaging **{recent_avg:.1f} points** in last 5 matches")
-        
-        # Venue performance
-        venue_avg = player_row.get('venue_avg_fantasy_points', 0)
-        venue_matches = player_row.get('venue_matches', 0)
-        if pd.notna(venue_avg) and venue_matches > 0:
-            explanations.append(f"🏟️ Venue expertise: **{venue_avg:.1f} points** average ({int(venue_matches)} matches at venue)")
-        
-        # Career stats
-        career_avg = player_row.get('career_avg_fantasy_points', 0)
-        career_matches = player_row.get('career_matches', 0)
-        if pd.notna(career_avg):
-            explanations.append(f"📈 Career average: **{career_avg:.1f} points** ({int(career_matches)} matches)")
-        
-        # Role-specific insights
-        role = player_row.get('role', 'Unknown')
-        if role == 'Batsman':
-            avg_runs = player_row.get('avg_runs_last_5', 0)
-            avg_sr = player_row.get('avg_strike_rate_last_5', 0)
-            if pd.notna(avg_runs):
-                explanations.append(f"🏏 Batting: **{avg_runs:.1f} runs** per match (SR: {avg_sr:.1f})")
-        elif role == 'Bowler':
-            avg_wickets = player_row.get('avg_wickets_last_5', 0)
-            avg_econ = player_row.get('avg_economy_last_5', 0)
-            if pd.notna(avg_wickets):
-                explanations.append(f"⚡ Bowling: **{avg_wickets:.2f} wickets** per match (Econ: {avg_econ:.2f})")
-        elif role == 'All-Rounder':
-            avg_runs = player_row.get('avg_runs_last_5', 0)
-            avg_wickets = player_row.get('avg_wickets_last_5', 0)
-            if pd.notna(avg_runs) and pd.notna(avg_wickets):
-                explanations.append(f"🌟 All-round: **{avg_runs:.1f} runs** + **{avg_wickets:.2f} wickets** per match")
-        
-        # Form trend
-        form_trend = player_row.get('form_trend', 0)
-        if pd.notna(form_trend):
-            if form_trend > 5:
-                explanations.append(f"📈 **Rising form** (momentum: +{form_trend:.1f})")
-            elif form_trend < -5:
-                explanations.append(f"📉 Recent dip in form ({form_trend:.1f})")
-        
-        return explanations
-    
-    def create_player_card(self, player_row, rank):
-        """Create visual player card"""
-        col1, col2 = st.columns([3, 1])
-        
-        with col1:
-            st.markdown(f"""
-            ### #{rank} {player_row['player']}
-            **{player_row['role']}** | {player_row['team']}
-            """)
-        
-        with col2:
-            st.metric("Predicted Points", f"{player_row['predicted_fantasy_points']:.0f}")
-        
-        # Explanation
-        with st.expander("💡 Why this player?"):
-            explanations = self.explain_player_selection(player_row)
-            for exp in explanations:
-                st.markdown(f"- {exp}")
-        
-        st.divider()
-    
     def generate_audio_summary(self, dream_team):
-        """Generate audio summary of team selection"""
+        """Generate audio summary of the dream team"""
         if not GTTS_AVAILABLE:
             return None
         
-        summary_text = f"Your Dream11 team has been generated. "
-        summary_text += f"The predicted total fantasy points is {dream_team['predicted_fantasy_points'].sum():.0f}. "
-        summary_text += f"The team includes {len(dream_team[dream_team['role']=='Batsman'])} batsmen, "
-        summary_text += f"{len(dream_team[dream_team['role']=='Bowler'])} bowlers, "
-        summary_text += f"{len(dream_team[dream_team['role']=='All-Rounder'])} all-rounders, "
-        summary_text += f"and {len(dream_team[dream_team['role']=='Wicket-Keeper'])} wicket-keeper. "
-        
-        top_player = dream_team.iloc[0]
-        summary_text += f"Your top pick is {top_player['player']}, predicted to score {top_player['predicted_fantasy_points']:.0f} points."
-        
         try:
+            summary = f"Your Dream 11 team has {len(dream_team)} players. "
+            
+            total_predicted = dream_team['predicted_fantasy_points'].sum()
+            summary += f"Expected total points: {total_predicted:.0f}. "
+            
+            top_3 = dream_team.head(3)
+            summary += "Top 3 players are: "
+            for idx, row in top_3.iterrows():
+                summary += f"{row['player']}, {row.get('role', 'Player')}, {row['predicted_fantasy_points']:.0f} points. "
+            
             # Generate audio
-            tts = gTTS(text=summary_text, lang='en', slow=False)
-            tts.save("team_summary.mp3")
-            return summary_text
-        except:
+            tts = gTTS(text=summary, lang='en', slow=False)
+            
+            with tempfile.NamedTemporaryFile(delete=False, suffix='.mp3') as fp:
+                tts.save(fp.name)
+                return fp.name
+        except Exception as e:
+            st.warning(f"Could not generate audio: {str(e)}")
             return None
+    
+    def visualize_team(self, dream_team):
+        """Create visualizations for the dream team"""
+        
+        # Points distribution by role
+        fig_role = px.bar(
+            dream_team.groupby('role')['predicted_fantasy_points'].sum().reset_index(),
+            x='role',
+            y='predicted_fantasy_points',
+            title='Expected Points by Role',
+            labels={'predicted_fantasy_points': 'Total Points', 'role': 'Role'},
+            color='role'
+        )
+        st.plotly_chart(fig_role, use_container_width=True)
+        
+        # Individual player contributions
+        fig_players = go.Figure(data=[
+            go.Bar(
+                x=dream_team['player'],
+                y=dream_team['predicted_fantasy_points'],
+                marker_color=dream_team['predicted_fantasy_points'],
+                marker_colorscale='Viridis',
+                text=dream_team['predicted_fantasy_points'].round(1),
+                textposition='auto'
+            )
+        ])
+        fig_players.update_layout(
+            title='Individual Player Predictions',
+            xaxis_title='Player',
+            yaxis_title='Predicted Points',
+            xaxis_tickangle=-45
+        )
+        st.plotly_chart(fig_players, use_container_width=True)
     
     def run(self):
         """Run the Product UI"""
+        st.set_page_config(page_title="Dream11 Team Builder", page_icon="🏏", layout="wide")
+        
         st.title("🏏 Dream11 Team Builder with AI")
-        st.markdown("### Your Ultimate Fantasy Cricket Team Selection Tool")
+        st.markdown("### Powered by 60+ Features & Ensemble ML Models")
         st.markdown("---")
         
-        # Get unique teams from data
-        all_teams = sorted(self.player_data['team'].unique())
+        # Sidebar inputs
+        st.sidebar.header("⚙️ Match Configuration")
         
-        # Input section
-        col1, col2, col3 = st.columns(3)
+        match_type = st.sidebar.selectbox(
+            "Match Format",
+            ["T20", "ODI"],
+            help="Select the match format"
+        )
+        
+        col1, col2 = st.sidebar.columns(2)
         
         with col1:
-            team1 = st.selectbox("Team 1", options=all_teams, index=0)
+            team1 = st.selectbox("Team 1", self.teams, key='team1')
         
         with col2:
-            team2_options = [t for t in all_teams if t != team1]
-            team2 = st.selectbox("Team 2", options=team2_options, index=0 if len(team2_options) > 0 else 0)
+            team2 = st.selectbox("Team 2", [t for t in self.teams if t != team1], key='team2')
         
-        with col3:
-            max_date = self.player_data['date'].max()
-            match_date = st.date_input("Match Date", value=max_date, max_value=max_date)
+        venue = st.sidebar.text_input("Venue", "Stadium Name")
+        match_date = st.sidebar.date_input("Match Date", datetime.now())
         
-        st.markdown("---")
+        # Player selection
+        st.sidebar.markdown("---")
+        st.sidebar.header("👥 Squad Selection (Optional)")
         
-        if st.button("🚀 Generate Dream Team", type="primary", use_container_width=True):
-            start_time = datetime.now()
+        use_custom_squad = st.sidebar.checkbox("Select Custom Squad")
+        
+        if use_custom_squad:
+            team1_players = st.sidebar.multiselect(
+                f"{team1} Players",
+                self.get_team_players(team1),
+                default=list(self.get_team_players(team1)[:15])
+            )
             
-            with st.spinner("🔍 Analyzing players and predicting performance..."):
-                # Get squad features
-                squad_features = self.get_squad_features(team1, team2, match_date)
+            team2_players = st.sidebar.multiselect(
+                f"{team2} Players",
+                self.get_team_players(team2),
+                default=list(self.get_team_players(team2)[:15])
+            )
+            
+            squad_players = team1_players + team2_players
+        else:
+            # Auto-select top players from each team
+            team1_players = self.get_team_players(team1)[:15]
+            team2_players = self.get_team_players(team2)[:15]
+            squad_players = list(team1_players) + list(team2_players)
+        
+        st.sidebar.markdown(f"**Squad Size:** {len(squad_players)} players")
+        
+        # Generate team button
+        if st.sidebar.button("🎯 Generate Dream Team", type="primary", use_container_width=True):
+            
+            if len(squad_players) < 11:
+                st.error("⚠️ Squad must have at least 11 players!")
+                return
+            
+            with st.spinner("🔮 Analyzing players and predicting performance..."):
+                # Predict for all squad players
+                predictions = self.predictor.predict_for_squad(
+                    squad_players,
+                    match_type=match_type.lower(),
+                    venue=venue,
+                    team1=team1,
+                    team2=team2
+                )
                 
-                if len(squad_features) < 11:
-                    st.error(f"❌ Insufficient player data. Found only {len(squad_features)} players. Need at least 11.")
-                    st.info("Try selecting different teams or a different date.")
+                if len(predictions) == 0:
+                    st.error("Could not generate predictions. Please check player names.")
                     return
                 
-                # Predict fantasy points
-                predictions = self.predictor.predict(squad_features)
+                # Add team information
+                predictions['team'] = predictions['player'].apply(
+                    lambda p: team1 if p in team1_players else team2
+                )
                 
                 # Select dream team
                 dream_team = self.select_dream_team(predictions)
             
-            end_time = datetime.now()
-            time_taken = (end_time - start_time).total_seconds()
+            st.success("✅ Dream Team Generated!")
             
             # Display results
-            st.success(f"Dream Team Generated in {time_taken:.2f} seconds!")
+            st.markdown("## 🏆 Your Dream 11 Team")
             
-            # Metrics
-            col1, col2, col3, col4, col5 = st.columns(5)
+            col1, col2, col3 = st.columns(3)
+            
             with col1:
-                st.metric("Total Points", f"{dream_team['predicted_fantasy_points'].sum():.0f}")
-            with col2:
-                st.metric("Batsmen", len(dream_team[dream_team['role']=='Batsman']))
-            with col3:
-                st.metric("Bowlers", len(dream_team[dream_team['role']=='Bowler']))
-            with col4:
-                st.metric("All-Rounders", len(dream_team[dream_team['role']=='All-Rounder']))
-            with col5:
-                st.metric("Wicket-Keepers", len(dream_team[dream_team['role']=='Wicket-Keeper']))
+                st.metric("Total Predicted Points", f"{dream_team['predicted_fantasy_points'].sum():.0f}")
             
-            st.markdown("---")
+            with col2:
+                st.metric("Average Points per Player", f"{dream_team['predicted_fantasy_points'].mean():.1f}")
+            
+            with col3:
+                st.metric("Top Scorer", dream_team.iloc[0]['player'])
+            
+            # Team composition
+            st.markdown("### 📋 Team Composition")
+            
+            role_counts = dream_team['role'].value_counts()
+            col1, col2, col3, col4 = st.columns(4)
+            
+            with col1:
+                st.metric("🧤 Wicket-Keepers", role_counts.get('Wicket-Keeper', 0))
+            with col2:
+                st.metric("🏏 Batsmen", role_counts.get('Batsman', 0))
+            with col3:
+                st.metric("🔄 All-Rounders", role_counts.get('All-Rounder', 0))
+            with col4:
+                st.metric("⚡ Bowlers", role_counts.get('Bowler', 0))
+            
+            # Display team table
+            st.markdown("### 🌟 Selected Players")
+            
+            display_df = dream_team[['player', 'role', 'team', 'predicted_fantasy_points']].copy()
+            display_df.columns = ['Player', 'Role', 'Team', 'Predicted Points']
+            display_df['Rank'] = range(1, len(display_df) + 1)
+            display_df = display_df[['Rank', 'Player', 'Role', 'Team', 'Predicted Points']]
+            
+            st.dataframe(display_df, use_container_width=True, hide_index=True)
+            
+            # Visualizations
+            st.markdown("### 📊 Team Analytics")
+            self.visualize_team(dream_team)
+            
+            # Player insights
+            with st.expander("🔍 Detailed Player Insights"):
+                for idx, row in dream_team.iterrows():
+                    st.markdown(f"**{row['player']}** ({row['role']})")
+                    
+                    col1, col2, col3 = st.columns(3)
+                    with col1:
+                        st.write(f"📊 Predicted: **{row['predicted_fantasy_points']:.1f} pts**")
+                    with col2:
+                        st.write(f"📈 Recent Form: **{row.get('avg_fantasy_points_last_5', 0):.1f} pts**")
+                    with col3:
+                        st.write(f"🏆 Career Avg: **{row.get('career_batting_avg', 0):.1f}**")
+                    
+                    st.markdown("---")
             
             # Audio summary
             if GTTS_AVAILABLE:
-                with st.spinner("🎙️ Generating audio summary..."):
-                    summary_text = self.generate_audio_summary(dream_team)
-                    if summary_text:
-                        try:
-                            audio_file = open("team_summary.mp3", "rb")
-                            audio_bytes = audio_file.read()
-                            st.audio(audio_bytes, format="audio/mp3")
-                            audio_file.close()
-                        except:
-                            pass
+                st.markdown("### 🔊 Audio Summary")
+                audio_file = self.generate_audio_summary(dream_team)
+                if audio_file:
+                    st.audio(audio_file)
             
-            # Player cards
-            st.markdown("## 🌟 Your Dream Team")
+            # Download options
+            st.markdown("### 💾 Export Options")
             
-            for idx, (_, player) in enumerate(dream_team.iterrows(), 1):
-                self.create_player_card(player, idx)
-            
-            # Visualizations
-            st.markdown("## 📊 Team Analytics")
-            
-            # Points distribution
-            fig1 = px.bar(
-                dream_team, 
-                x='player', 
-                y='predicted_fantasy_points',
-                color='role',
-                title='Predicted Fantasy Points by Player',
-                labels={'predicted_fantasy_points': 'Fantasy Points', 'player': 'Player'},
-                color_discrete_map={
-                    'Batsman': '#FF6B6B',
-                    'Bowler': '#4ECDC4',
-                    'All-Rounder': '#FFD93D',
-                    'Wicket-Keeper': '#95E1D3'
-                }
+            csv = dream_team.to_csv(index=False)
+            st.download_button(
+                label="📥 Download Team as CSV",
+                data=csv,
+                file_name=f"dream11_team_{match_date}.csv",
+                mime="text/csv",
+                use_container_width=True
             )
-            st.plotly_chart(fig1, use_container_width=True)
+        
+        # Information section
+        with st.expander("ℹ️ How It Works"):
+            st.markdown("""
+            ### Feature Set (60+ Features)
             
-            # Role distribution pie chart
-            role_dist = dream_team['role'].value_counts()
-            fig2 = px.pie(
-                values=role_dist.values,
-                names=role_dist.index,
-                title='Team Composition by Role',
-                color_discrete_map={
-                    'Batsman': '#FF6B6B',
-                    'Bowler': '#4ECDC4',
-                    'All-Rounder': '#FFD93D',
-                    'Wicket-Keeper': '#95E1D3'
-                }
-            )
-            st.plotly_chart(fig2, use_container_width=True)
+            **Match-Level Stats:**
+            - Recent form (last 3, 5, 10 matches)
+            - Per-innings averages (runs, wickets, etc.)
+            - Advanced metrics (boundary %, bowling S/R, etc.)
+            
+            **Career Aggregate Stats:**
+            - 20+ career statistics from Cricsheet
+            - Batting: Runs, Average, Strike Rate, Hundreds, Fifties
+            - Bowling: Wickets, Average, Economy, Best Figures
+            - Fielding: Catches, Stumpings, Run Outs
+            
+            **Machine Learning Models:**
+            - XGBoost, LightGBM, CatBoost ensemble
+            - Trained on 7,000+ international matches
+            - Baseline comparisons with traditional models
+            
+            ### Dream11 Constraints
+            - 11 players total
+            - 1-7 players from each team
+            - 1-4 Wicket-Keepers (min 1)
+            - 1-8 Batsmen (min 1)
+            - 1-4 All-Rounders (min 1)
+            - 1-8 Bowlers (min 1)
+            """)
 
 def main():
-    st.set_page_config(
-        page_title="Dream11 Team Builder",
-        page_icon="🏏",
-        layout="wide"
-    )
-    
     ui = ProductUI()
     ui.run()
 
