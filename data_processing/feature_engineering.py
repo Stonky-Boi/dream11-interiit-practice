@@ -10,7 +10,7 @@ from tqdm import tqdm
 import warnings
 warnings.filterwarnings('ignore')
 
-print_length=100
+print_length = 100
 
 class CricketFeatureEngineering:
     """
