@@ -1,6 +1,4 @@
 venv/
 data/
 catboost_info/
-model_artifacts/
 __pycache__/
-team_summary.mp3

@@ -1,0 +1,69 @@
+{
+  "all_models": {
+    "linear_regression": {
+      "type": "baseline",
+      "val_mae": 14.399235180904803,
+      "val_rmse": 22.022586126880793,
+      "val_r2": 0.22605006276555994,
+      "train_mae": 14.42898436751438
+    },
+    "ridge": {
+      "type": "baseline",
+      "val_mae": 14.39974845579528,
+      "val_rmse": 22.022602995299945,
+      "val_r2": 0.22604887713578248,
+      "train_mae": 14.429496901098883
+    },
+    "lasso": {
+      "type": "baseline",
+      "val_mae": 14.834345932231809,
+      "val_rmse": 22.220114292062256,
+      "val_r2": 0.2121041516893566,
+      "train_mae": 14.867363266871804
+    },
+    "random_forest": {
+      "type": "baseline",
+      "val_mae": 12.848372233367503,
+      "val_rmse": 21.266164500270538,
+      "val_r2": 0.2783035433459796,
+      "train_mae": 12.620712573793561
+    },
+    "gradient_boosting": {
+      "type": "baseline",
+      "val_mae": 12.912561212299995,
+      "val_rmse": 21.24091578896267,
+      "val_r2": 0.2800162253212446,
+      "train_mae": 12.848952170302276
+    },
+    "xgboost": {
+      "type": "ensemble",
+      "val_mae": 12.915302276611328,
+      "val_rmse": 21.290252260332515,
+      "val_r2": 0.2766677737236023,
+      "train_mae": 12.016474723815918
+    },
+    "lightgbm": {
+      "type": "ensemble",
+      "val_mae": 12.918078524921524,
+      "val_rmse": 21.242554630167053,
+      "val_r2": 0.2799051204510774,
+      "train_mae": 12.623277310577233
+    },
+    "catboost": {
+      "type": "ensemble",
+      "val_mae": 12.879123960333539,
+      "val_rmse": 21.225048862349073,
+      "val_r2": 0.2810914767841852,
+      "train_mae": 12.788390700855116
+    },
+    "ensemble": {
+      "type": "ensemble",
+      "val_mae": 12.877333997263413,
+      "val_rmse": 21.221423017606,
+      "val_r2": 0.2813370760345193,
+      "train_mae": 12.451253484431513
+    }
+  },
+  "best_model": "random_forest",
+  "training_date": "2025-10-11 14:36:51"
+}
