@@ -146,7 +146,7 @@ class Dream11Predictor:
         return result_df
     
     def get_player_recent_features(self, player_name, match_type='t20', num_recent=10):
-        training_data_path = self.data_dir / 'processed' / 'training_data_2024-06-30.csv'
+        training_data_path = self.data_dir / 'processed' / 'training_data_all.csv'
         
         if not training_data_path.exists():
             return None

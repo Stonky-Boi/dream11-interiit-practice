@@ -542,7 +542,8 @@ class CricketFeatureEngineering:
         for role, count in player_role_dist.items():
             print(f"  {role:15s}: {count:4,} players")
     
-    def save_processed_data(self, filename='training_data_2024-06-30.csv'):
+    def save_processed_data(self, filename='training_data_all.csv'):
+        """Save final processed data (ALL dates)"""
         output_path = self.processed_dir / filename
         self.training_df.to_csv(output_path, index=False)
         
@@ -554,6 +555,7 @@ class CricketFeatureEngineering:
         print(f"✓ Total Features: {len(self.training_df.columns)}")
         print(f"✓ Players: {self.training_df['player'].nunique():,}")
         print(f"✓ Matches: {self.training_df['match_id'].nunique():,}")
+        print(f"✓ Date range: {self.training_df['date'].min().date()} to {self.training_df['date'].max().date()}")
         
         # Feature breakdown
         feature_categories = {
@@ -570,7 +572,11 @@ class CricketFeatureEngineering:
             print(f"  {category:25s}: {count}")
         
         print(f"\n✓ Total: {sum(feature_categories.values())} features")
-        print("✓ NO FEATURES REDUCED - Full Silver Medal Team Feature Set!")
+        print("✓ NO FEATURES REDUCED - Full Feature Set!")
+        print("\n⚠️  IMPORTANT:")
+        print("  • This file contains ALL available data")
+        print("  • Training cutoff (≤ 2024-06-30) will be enforced in train_model.py")
+        print("  • Data after 2024-07-01 is reserved for testing")
         
         return output_path
     
