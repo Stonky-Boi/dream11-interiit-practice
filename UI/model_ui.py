@@ -1,7 +1,3 @@
-"""
-Model UI - Model Training and Evaluation Interface
-"""
-
 import streamlit as st
 import pandas as pd
 import numpy as np
@@ -18,15 +14,12 @@ import warnings
 warnings.filterwarnings('ignore')
 
 class ModelUI:
-    """Model UI for training and evaluation"""
-    
     def __init__(self):
         self.data_dir = Path('data')
         self.processed_dir = self.data_dir / 'processed'
         self.model_artifacts_dir = Path('model_artifacts')
     
     def train_model(self, train_start, train_end, model_name):
-        """Train model on specified date range"""
         st.info(f"📚 Training model from {train_start} to {train_end}...")
         
         # Load all data
@@ -111,7 +104,6 @@ class ModelUI:
             return None
     
     def evaluate_model(self, model_name, test_start, test_end):
-        """Evaluate model on test period"""
         st.info(f"🧪 Evaluating on period {test_start} to {test_end}...")
         
         try:
@@ -222,7 +214,6 @@ class ModelUI:
             return None
     
     def display_model_comparison(self, model_name):
-        """Display model comparison from training"""
         comparison_path = self.model_artifacts_dir / f"{model_name}_model_comparison.json"
         
         if not comparison_path.exists():
@@ -290,30 +281,30 @@ class ModelUI:
         st.success(f"🏆 Best Model: **{best_model.replace('_', ' ').title()}** (Val MAE: {best_mae:.2f})")
     
     def run(self):
-        """Run Model UI"""
         st.title("🔬 Model UI - Performance Analysis")
-        st.markdown("### Evaluate Model Performance with 60+ Features")
         st.markdown("---")
         
         # Info box
         st.info("""
-        **Important Guidelines:**
-        - Training end date MUST be ≤ 2024-06-30 (disqualification if violated)
-        - Testing period should be after training period
-        - Model uses 60+ features (Silver Medal Team approach)
-        - Results will be saved as CSV in required format
+        **Competition Requirements:**
+        - Training data: Up to 2024-06-30 (already processed)
+        - Test data: After 2024-07-01 (will be provided by organizers)
+        - Model must be reproducible and generate CSV output
+        
+        **Options:**
+        1. **Train Model**: Train on available data (2024-06-30 cutoff)
+        2. **Evaluate on Test Data**: Load and evaluate on out-of-sample test data
         """)
+        
+        # Select mode
+        mode = st.radio(
+            "Select Mode",
+            ["Train Model Only", "Train & Evaluate on Test Data"],
+            horizontal=True
+        )
         
         # Training section
         st.header("1️⃣ Training Configuration")
-        
-        st.warning("""
-        **Important:** All data is limited to 2024-06-30 (competition requirement).
-        For evaluation:
-        - Use a train-test split within the available data
-        - Example: Train on 2010-2023, Test on 2024-01 to 2024-06-30
-        - Or use cross-validation on the full dataset
-        """)
         
         col1, col2 = st.columns(2)
         
@@ -322,31 +313,17 @@ class ModelUI:
                 "Training Start Date",
                 value=datetime(2010, 1, 1),
                 min_value=datetime(2000, 1, 1),
-                max_value=datetime(2024, 6, 30)
-            )
-            
-            test_start = st.date_input(
-                "Testing Start Date",
-                value=datetime(2024, 1, 1),
-                min_value=datetime(2020, 1, 1),
                 max_value=datetime(2024, 6, 30),
-                help="Must be within available data (up to 2024-06-30)"
+                help="Start date for training data"
             )
         
         with col2:
             train_end = st.date_input(
                 "Training End Date",
-                value=datetime(2023, 12, 31),
-                min_value=datetime(2000, 1, 1),
-                max_value=datetime(2024, 6, 30)
-            )
-            
-            test_end = st.date_input(
-                "Testing End Date",
                 value=datetime(2024, 6, 30),
-                min_value=datetime(2020, 1, 1),
+                min_value=datetime(2000, 1, 1),
                 max_value=datetime(2024, 6, 30),
-                help="Maximum date is 2024-06-30 (competition cutoff)"
+                help="MUST be ≤ 2024-06-30 (disqualification if violated)"
             )
         
         model_name = st.text_input(
@@ -355,172 +332,295 @@ class ModelUI:
             help="Give your model a unique name"
         )
         
+        # Test data section (only if evaluate mode)
+        if mode == "Train & Evaluate on Test Data":
+            st.header("2️⃣ Test Data Configuration")
+            
+            st.markdown("""
+            Upload test data CSV with the same format as training data.
+            
+            **Expected columns:**
+            - player, match_id, date, venue, team, opposition, match_type
+            - fantasy_points (target)
+            - All feature columns (45+ features)
+            """)
+            
+            test_data_source = st.radio(
+                "Test Data Source",
+                ["Upload CSV File", "Load from data/out_of_sample_data/"]
+            )
+            
+            test_df = None
+            
+            if test_data_source == "Upload CSV File":
+                uploaded_file = st.file_uploader(
+                    "Upload Test Data CSV",
+                    type=['csv'],
+                    help="Test data should have same structure as training data"
+                )
+                
+                if uploaded_file is not None:
+                    try:
+                        test_df = pd.read_csv(uploaded_file)
+                        test_df['date'] = pd.to_datetime(test_df['date'])
+                        
+                        st.success(f"✅ Loaded test data: {len(test_df):,} records")
+                        st.write(f"Date range: {test_df['date'].min().date()} to {test_df['date'].max().date()}")
+                        
+                        # Validate test data is after cutoff
+                        if test_df['date'].min() <= pd.to_datetime('2024-06-30'):
+                            st.warning("⚠️ Test data contains dates ≤ 2024-06-30. Should be > 2024-07-01")
+                        
+                    except Exception as e:
+                        st.error(f"Error loading test data: {str(e)}")
+            
+            else:  # Load from directory
+                test_data_dir = Path('data/out_of_sample_data')
+                
+                if test_data_dir.exists():
+                    csv_files = list(test_data_dir.glob('*.csv'))
+                    
+                    if csv_files:
+                        selected_file = st.selectbox(
+                            "Select Test Data File",
+                            [f.name for f in csv_files]
+                        )
+                        
+                        if selected_file:
+                            test_path = test_data_dir / selected_file
+                            test_df = pd.read_csv(test_path)
+                            test_df['date'] = pd.to_datetime(test_df['date'])
+                            
+                            st.success(f"✅ Loaded: {selected_file}")
+                            st.write(f"Records: {len(test_df):,}")
+                            st.write(f"Date range: {test_df['date'].min().date()} to {test_df['date'].max().date()}")
+                    else:
+                        st.warning("No CSV files found in data/out_of_sample_data/")
+                        st.info("Place test data CSV files in data/out_of_sample_data/ directory")
+                else:
+                    st.warning("Directory data/out_of_sample_data/ does not exist")
+                    test_data_dir.mkdir(parents=True, exist_ok=True)
+                    st.info("Created directory. Please add test data CSV files.")
+        
         # Validation
         cutoff_date = date(2024, 6, 30)
         
         if train_end > cutoff_date:
             st.error("⚠️ DISQUALIFICATION RISK: Training end date must be ≤ 2024-06-30")
-        elif test_end > cutoff_date:
-            st.error("⚠️ Testing end date must be ≤ 2024-06-30 (data cutoff)")
-        elif test_start <= train_end:
-            st.warning("⚠️ Testing period should start after training period")
-        elif test_start < datetime(2024, 1, 1).date():
-            st.info("ℹ️ Recommended test period: 2024-01-01 to 2024-06-30 for temporal validation")
         else:
-            st.success("✅ Date configuration is valid")
+            st.success("✅ Training configuration is valid")
         
         st.markdown("---")
         
         # Action buttons
-        col1, col2 = st.columns(2)
-        
-        with col1:
+        if mode == "Train Model Only":
             train_button = st.button(
                 "🎯 Train Model",
-                type="secondary",
-                use_container_width=True,
-                disabled=(train_end > cutoff_date)
-            )
-        
-        with col2:
-            eval_button = st.button(
-                "📊 Train & Evaluate",
                 type="primary",
                 use_container_width=True,
                 disabled=(train_end > cutoff_date)
             )
-        
-        # Training only
-        if train_button:
-            st.markdown("---")
-            st.header("2️⃣ Training Progress")
             
-            trainer = self.train_model(train_start, train_end, model_name)
-            
-            if trainer:
-                st.success(f"✅ Model trained successfully: {model_name}")
-                
-                # Display metrics
-                col1, col2, col3, col4 = st.columns(4)
-                with col1:
-                    st.metric("Ensemble MAE", f"{trainer.ensemble_mae:.2f}")
-                with col2:
-                    st.metric("Ensemble RMSE", f"{trainer.ensemble_rmse:.2f}")
-                with col3:
-                    st.metric("Ensemble R²", f"{trainer.ensemble_r2:.4f}")
-                with col4:
-                    st.metric("Features", len(trainer.feature_cols))
-                
-                # Display model comparison
+            if train_button:
                 st.markdown("---")
-                self.display_model_comparison(model_name)
-        
-        # Train and Evaluate
-        if eval_button:
-            st.markdown("---")
-            st.header("2️⃣ Training Progress")
-            
-            # Train
-            trainer = self.train_model(train_start, train_end, model_name)
-            
-            if trainer:
-                st.success(f"✅ Model trained: {model_name}")
+                st.header("2️⃣ Training Progress")
                 
-                # Display model comparison
-                st.markdown("---")
-                self.display_model_comparison(model_name)
+                trainer = self.train_model(train_start, train_end, model_name)
                 
-                st.markdown("---")
-                st.header("3️⃣ Evaluation Results")
-                
-                # Evaluate
-                results_df = self.evaluate_model(model_name, test_start, test_end)
-                
-                if results_df is not None and len(results_df) > 0:
+                if trainer:
+                    st.success(f"✅ Model trained successfully: {model_name}")
+                    
                     # Display metrics
-                    avg_mae = results_df['MAE'].mean()
-                    median_mae = results_df['MAE'].median()
-                    min_mae = results_df['MAE'].min()
-                    max_mae = results_df['MAE'].max()
-                    
-                    st.success(f"✅ Evaluation complete!")
-                    
                     col1, col2, col3, col4 = st.columns(4)
                     with col1:
-                        st.metric("Total Matches", len(results_df))
+                        st.metric("Ensemble MAE", f"{trainer.ensemble_mae:.2f}")
                     with col2:
-                        st.metric("Average MAE", f"{avg_mae:.2f}")
+                        st.metric("Ensemble RMSE", f"{trainer.ensemble_rmse:.2f}")
                     with col3:
-                        st.metric("Median MAE", f"{median_mae:.2f}")
+                        st.metric("Ensemble R²", f"{trainer.ensemble_r2:.4f}")
                     with col4:
-                        st.metric("Best MAE", f"{min_mae:.2f}")
+                        st.metric("Features", len(trainer.feature_cols))
                     
-                    # MAE distribution
-                    st.markdown("### MAE Distribution")
-                    import plotly.express as px
-                    fig = px.histogram(
-                        results_df,
-                        x='MAE',
-                        nbins=30,
-                        title='Distribution of Match-level MAE',
-                        labels={'MAE': 'Mean Absolute Error'}
-                    )
-                    st.plotly_chart(fig, use_container_width=True)
+                    # Display model comparison
+                    st.markdown("---")
+                    self.display_model_comparison(model_name)
+        
+        else:  # Train & Evaluate
+            eval_button = st.button(
+                "📊 Train & Evaluate",
+                type="primary",
+                use_container_width=True,
+                disabled=(train_end > cutoff_date or test_df is None)
+            )
+            
+            if eval_button:
+                if test_df is None:
+                    st.error("Please load test data first")
+                    return
+                
+                st.markdown("---")
+                st.header("3️⃣ Training Progress")
+                
+                # Train
+                trainer = self.train_model(train_start, train_end, model_name)
+                
+                if trainer:
+                    st.success(f"✅ Model trained: {model_name}")
                     
-                    # Display results table
-                    st.markdown("### Detailed Results")
-                    st.dataframe(
-                        results_df[[
-                            'Match_Date', 'Team_1', 'Team_2', 'Match_Type',
-                            'Dream_Team_Total_Points', 'Predicted_Team_Total', 'MAE'
-                        ]],
-                        use_container_width=True
-                    )
+                    # Display model comparison
+                    st.markdown("---")
+                    self.display_model_comparison(model_name)
                     
-                    # Show predicted teams
-                    with st.expander("📋 View Predicted Teams for All Matches"):
-                        for idx, row in results_df.iterrows():
-                            st.markdown(f"**Match: {row['Team_1']} vs {row['Team_2']} ({row['Match_Date']})**")
-                            
-                            col1, col2 = st.columns(2)
-                            
-                            with col1:
-                                st.markdown("**Predicted Team:**")
-                                for i in range(1, 12):
-                                    player_col = f'Predicted_Player_{i}'
-                                    points_col = f'Predicted_Player_{i}_Points'
-                                    role_col = f'Predicted_Player_{i}_Role'
-                                    if player_col in row and pd.notna(row[player_col]):
-                                        st.write(f"{i}. {row[player_col]} ({row[role_col]}) - {row[points_col]:.1f} pts")
-                            
-                            with col2:
-                                st.markdown("**Actual Dream Team:**")
-                                for i in range(1, 12):
-                                    player_col = f'Dream_Team_Player_{i}'
-                                    points_col = f'Dream_Team_Player_{i}_Points'
-                                    role_col = f'Dream_Team_Player_{i}_Role'
-                                    if player_col in row and pd.notna(row[player_col]):
-                                        st.write(f"{i}. {row[player_col]} ({row[role_col]}) - {row[points_col]:.1f} pts")
-                            
-                            st.markdown("---")
+                    st.markdown("---")
+                    st.header("4️⃣ Evaluation on Test Data")
                     
-                    # Download CSV
-                    csv = results_df.to_csv(index=False)
-                    timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
-                    filename = f"evaluation_results_{model_name}_{timestamp}.csv"
+                    # Evaluate on test data
+                    results_df = self.evaluate_on_test_data(model_name, test_df)
                     
-                    st.download_button(
-                        label="📥 Download Results CSV",
-                        data=csv,
-                        file_name=filename,
-                        mime="text/csv",
-                        type="primary",
-                        use_container_width=True
-                    )
-                    
-                    st.success(f"💾 Results ready for download: {filename}")
-                else:
-                    st.error("No results generated")
+                    if results_df is not None and len(results_df) > 0:
+                        # Display metrics
+                        avg_mae = results_df['MAE'].mean()
+                        median_mae = results_df['MAE'].median()
+                        min_mae = results_df['MAE'].min()
+                        max_mae = results_df['MAE'].max()
+                        
+                        st.success(f"✅ Evaluation complete!")
+                        
+                        col1, col2, col3, col4 = st.columns(4)
+                        with col1:
+                            st.metric("Total Matches", len(results_df))
+                        with col2:
+                            st.metric("Average MAE", f"{avg_mae:.2f}")
+                        with col3:
+                            st.metric("Median MAE", f"{median_mae:.2f}")
+                        with col4:
+                            st.metric("Best MAE", f"{min_mae:.2f}")
+                        
+                        # MAE distribution
+                        st.markdown("### MAE Distribution")
+                        import plotly.express as px
+                        fig = px.histogram(
+                            results_df,
+                            x='MAE',
+                            nbins=30,
+                            title='Distribution of Match-level MAE',
+                            labels={'MAE': 'Mean Absolute Error'}
+                        )
+                        st.plotly_chart(fig, use_container_width=True)
+                        
+                        # Display results table
+                        st.markdown("### Detailed Results")
+                        st.dataframe(
+                            results_df[[
+                                'Match_Date', 'Team_1', 'Team_2', 'Match_Type',
+                                'Dream_Team_Total_Points', 'Predicted_Team_Total', 'MAE'
+                            ]],
+                            use_container_width=True
+                        )
+                        
+                        # Download CSV
+                        csv = results_df.to_csv(index=False)
+                        timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+                        filename = f"evaluation_results_{model_name}_{timestamp}.csv"
+                        
+                        st.download_button(
+                            label="📥 Download Results CSV",
+                            data=csv,
+                            file_name=filename,
+                            mime="text/csv",
+                            type="primary",
+                            use_container_width=True
+                        )
+                        
+                        st.success(f"💾 Results ready for download: {filename}")
+                    else:
+                        st.error("No results generated")
+    
+    def evaluate_on_test_data(self, model_name, test_df):
+        st.info(f"🧪 Evaluating on {len(test_df):,} test records...")
+        
+        try:
+            # Load predictor
+            predictor = Dream11Predictor(
+                model_dir=str(self.model_artifacts_dir),
+                model_name=model_name
+            )
+            
+            # Get unique matches
+            matches = test_df.groupby(['match_id', 'date']).first().reset_index()
+            
+            results = []
+            progress_bar = st.progress(0)
+            status_text = st.empty()
+            
+            for idx, (_, match) in enumerate(matches.iterrows()):
+                progress = (idx + 1) / len(matches)
+                progress_bar.progress(progress)
+                status_text.text(f"Evaluating match {idx + 1}/{len(matches)}...")
+                
+                match_data = test_df[test_df['match_id'] == match['match_id']].copy()
+                
+                if len(match_data) < 11:
+                    continue
+                
+                # Predict
+                predictions = predictor.predict(match_data)
+                predictions = predictions.sort_values('predicted_fantasy_points', ascending=False)
+                
+                # Get actual dream team (top 11 by actual fantasy points)
+                actual_dream_team = match_data.nlargest(11, 'fantasy_points')
+                
+                # Get predicted dream team (top 11 by predicted points)
+                predicted_dream_team = predictions.nlargest(11, 'predicted_fantasy_points')
+                
+                # Calculate MAE
+                actual_total = actual_dream_team['fantasy_points'].sum()
+                predicted_total = predicted_dream_team['predicted_fantasy_points'].sum()
+                mae = abs(actual_total - predicted_total)
+                
+                result = {
+                    'Match_ID': match['match_id'],
+                    'Match_Date': match['date'].strftime('%Y-%m-%d'),
+                    'Team_1': match.get('team', 'Unknown'),
+                    'Team_2': match.get('opposition', 'Unknown'),
+                    'Venue': match.get('venue', 'Unknown'),
+                    'Match_Type': match.get('match_type', 'Unknown'),
+                    'Dream_Team_Total_Points': round(actual_total, 2),
+                    'Predicted_Team_Total': round(predicted_total, 2),
+                    'MAE': round(mae, 2)
+                }
+                
+                # Add predicted team players
+                for i in range(min(11, len(predicted_dream_team))):
+                    pred_player = predicted_dream_team.iloc[i]
+                    result[f'Predicted_Player_{i+1}'] = pred_player['player']
+                    result[f'Predicted_Player_{i+1}_Points'] = round(pred_player['predicted_fantasy_points'], 2)
+                    result[f'Predicted_Player_{i+1}_Role'] = pred_player.get('role', 'Unknown')
+                
+                # Add actual dream team players
+                for i in range(min(11, len(actual_dream_team))):
+                    actual_player = actual_dream_team.iloc[i]
+                    result[f'Dream_Team_Player_{i+1}'] = actual_player['player']
+                    result[f'Dream_Team_Player_{i+1}_Points'] = round(actual_player['fantasy_points'], 2)
+                    result[f'Dream_Team_Player_{i+1}_Role'] = actual_player.get('role', 'Unknown')
+                
+                results.append(result)
+            
+            progress_bar.progress(1.0)
+            status_text.text("✓ Evaluation complete!")
+            
+            if len(results) == 0:
+                st.error("No valid matches found for evaluation")
+                return None
+            
+            results_df = pd.DataFrame(results)
+            return results_df
+            
+        except Exception as e:
+            st.error(f"Evaluation failed: {str(e)}")
+            import traceback
+            st.error(traceback.format_exc())
+            return None
 
 def main():
     st.set_page_config(

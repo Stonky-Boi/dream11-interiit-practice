@@ -20,7 +20,7 @@ def main():
     
     page = st.sidebar.radio(
         "Select Interface",
-        ["🏏 Product UI - Team Builder", "🔬 Model UI - Evaluation"],
+        ["Product UI - Team Builder", "Model UI - Evaluation"],
         label_visibility="collapsed"
     )
     
@@ -29,11 +29,7 @@ def main():
     st.sidebar.info("""
     **Dream11 Inter-IIT Tech Meet 13.0**
     
-    AI-powered fantasy cricket team builder using:
-    - **45+ Features** (Historical only - no leakage)
-    - **Ensemble ML** (XGBoost + LightGBM + CatBoost)
-    - **270,000+ Records** from Cricsheet
-    - **Career Aggregate Stats** integration
+    AI-powered fantasy cricket team builder using Ensemble ML (XGBoost + LightGBM + CatBoost)
     """)
     
     st.sidebar.markdown("---")
@@ -59,12 +55,12 @@ def main():
         st.sidebar.info("Run data processing scripts")
     
     # Route to selected page
-    if page == "🏏 Product UI - Team Builder":
+    if page == "Product UI - Team Builder":
         from UI.product_ui import ProductUI
         ui = ProductUI()
         ui.run()
     
-    elif page == "🔬 Model UI - Evaluation":
+    elif page == "Model UI - Evaluation":
         from UI.model_ui import ModelUI
         ui = ModelUI()
         ui.run()

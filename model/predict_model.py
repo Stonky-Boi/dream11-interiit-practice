@@ -248,7 +248,7 @@ class Dream11Predictor:
         Args:
             squad_players: List of player names
             match_type: 't20' or 'odi'
-            venue: Venue name
+            venue: Venue name (optional, not used in predictions)
             team1: First team name
             team2: Second team name
         """
