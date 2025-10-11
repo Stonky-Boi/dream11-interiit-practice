@@ -1,0 +1,3 @@
+match_id  player_id     actual_F0    computed_F0        best_prototype                  prototype_label
+ 1398276  19147fe0       32.0       56.109924               5                Elite Keeper-Batsman (Run-Heavy)
+                                                                             Heavy batting presence (runs, strike rate, boundaries) plus consistent stumpings/catches — keeper with top batting contribution
