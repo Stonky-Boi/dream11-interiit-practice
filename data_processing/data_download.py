@@ -11,6 +11,8 @@ from datetime import datetime
 import warnings
 warnings.filterwarnings('ignore')
 
+print_length = 100
+
 try:
     import cricketstats as cks
 except ImportError:
@@ -34,9 +36,9 @@ def download_cricsheet_database(data_dir='data'):
         print(f"  Size: {file_size:.1f} MB")
         return str(database_path)
     
-    print("=" * 70)
+    print("=" * print_length)
     print("DOWNLOADING CRICSHEET DATABASE")
-    print("=" * 70)
+    print("=" * print_length)
     print("⚠️  This may take 5-10 minutes depending on your connection")
     print("📦  Downloading all_json.zip from cricsheet.org...")
     
@@ -223,16 +225,16 @@ def run_extraction_pipeline(cutoff_date='2024-06-30', data_dir='data'):
     Run complete extraction pipeline
     Extracts both training and test data (if available)
     """
-    print("\n" + "=" * 70)
+    print("\n" + "=" * print_length)
     print("DREAM11 INTER-IIT DATA EXTRACTION PIPELINE")
-    print("=" * 70)
+    print("=" * print_length)
     print("Using cricketstats library (Silver Medal Team approach)")
     print(f"Training cutoff: {cutoff_date}")
-    print("=" * 70)
+    print("=" * print_length)
     
     # Step 1: Download database
     print("\n[STEP 1/5] Downloading Cricsheet Database")
-    print("-" * 70)
+    print("-" * print_length)
     database = download_cricsheet_database(data_dir)
     
     if database is None:
@@ -248,39 +250,39 @@ def run_extraction_pipeline(cutoff_date='2024-06-30', data_dir='data'):
     
     # Step 3: Extract ODI data
     print("\n[STEP 2/5] Extracting ODI Match Data (Training)")
-    print("-" * 70)
+    print("-" * print_length)
     matchtype_odi = ["ODI", "ODM"]
     odi_data = data_extracter(database, matchtype_odi, from_date, to_date_train, data_dir)
     
     # Step 4: Extract T20 data
     print("\n[STEP 3/5] Extracting T20 Match Data (Training)")
-    print("-" * 70)
+    print("-" * print_length)
     matchtype_t20 = ["T20"]
     t20_data = data_extracter(database, matchtype_t20, from_date, to_date_train, data_dir)
     
     # Step 5: Extract aggregate ODI data
     print("\n[STEP 4/5] Extracting ODI Aggregate Statistics")
-    print("-" * 70)
+    print("-" * print_length)
     odi_aggregate = aggregate_points_json(database, matchtype_odi, from_date, to_date_train, data_dir)
     
     # Step 6: Extract aggregate T20 data
     print("\n[STEP 5/5] Extracting T20 Aggregate Statistics")
-    print("-" * 70)
+    print("-" * print_length)
     t20_aggregate = aggregate_points_json(database, matchtype_t20, from_date, to_date_train, data_dir)
     
     # Summary
-    print("\n" + "=" * 70)
+    print("\n" + "=" * print_length)
     print("EXTRACTION SUMMARY")
-    print("=" * 70)
+    print("=" * print_length)
     print(f"✓ ODI match data: {len(odi_data):,} player-innings records")
     print(f"✓ T20 match data: {len(t20_data):,} player-innings records")
     print(f"✓ ODI aggregate: {len(odi_aggregate):,} players")
     print(f"✓ T20 aggregate: {len(t20_aggregate):,} players")
     print(f"✓ Data saved to: {data_dir}/")
     
-    print("\n" + "=" * 70)
+    print("\n" + "=" * print_length)
     print("✓✓✓ DATA EXTRACTION COMPLETE ✓✓✓")
-    print("=" * 70)
+    print("=" * print_length)
     print("\nFiles created:")
     print(f"  • {data_dir}/raw/ODI_ODM_data.csv")
     print(f"  • {data_dir}/raw/T20_data.csv")
