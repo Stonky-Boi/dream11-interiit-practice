@@ -1,9 +1,3 @@
-"""
-Model Training Script for Dream11 Fantasy Points Prediction
-Handles expanded feature set (60+ features)
-Trains ensemble models + baseline comparisons
-"""
-
 import pandas as pd
 import numpy as np
 from pathlib import Path
@@ -20,9 +14,9 @@ from catboost import CatBoostRegressor
 import warnings
 warnings.filterwarnings('ignore')
 
-class Dream11ModelTrainer:
-    """Train ensemble models for fantasy points prediction"""
-    
+print_length = 100
+
+class Dream11ModelTrainer:    
     def __init__(self, data_path, model_artifacts_dir='model_artifacts'):
         self.data_path = Path(data_path)
         self.model_dir = Path(model_artifacts_dir)
@@ -39,10 +33,9 @@ class Dream11ModelTrainer:
         self.all_results = {}
     
     def load_data(self, train_end_date='2024-06-30'):
-        """Load training data with date filtering"""
-        print("=" * 70)
-        print("LOADING TRAINING DATA (60+ FEATURES)")
-        print("=" * 70)
+        print("=" * print_length)
+        print("LOADING TRAINING DATA")
+        print("=" * print_length)
         
         self.df = pd.read_csv(self.data_path)
         self.df['date'] = pd.to_datetime(self.df['date'])
@@ -67,10 +60,9 @@ class Dream11ModelTrainer:
         return self.df
     
     def prepare_features(self):
-        """Prepare feature matrix and target"""
-        print("\n" + "=" * 70)
+        print("\n" + "=" * print_length)
         print("PREPARING FEATURES")
-        print("=" * 70)
+        print("=" * print_length)
         
         # Remove rows with insufficient historical data
         initial_count = len(self.df)
@@ -113,10 +105,9 @@ class Dream11ModelTrainer:
         return self.X, self.y
     
     def split_data(self, test_size=0.15, random_state=42):
-        """Split data into train and validation sets"""
-        print("\n" + "=" * 70)
+        print("\n" + "=" * print_length)
         print("SPLITTING DATA")
-        print("=" * 70)
+        print("=" * print_length)
         
         self.X_train, self.X_val, self.y_train, self.y_val = train_test_split(
             self.X, self.y, test_size=test_size, random_state=random_state, shuffle=True
@@ -129,10 +120,9 @@ class Dream11ModelTrainer:
         return self.X_train, self.X_val, self.y_train, self.y_val
     
     def train_baseline_models(self):
-        """Train baseline models for comparison"""
-        print("\n" + "=" * 70)
+        print("\n" + "=" * print_length)
         print("TRAINING BASELINE MODELS")
-        print("=" * 70)
+        print("=" * print_length)
         
         # Convert categorical to numeric for baseline models
         X_train_numeric = self.X_train.copy()
@@ -186,10 +176,9 @@ class Dream11ModelTrainer:
             }
     
     def train_xgboost(self):
-        """Train XGBoost model"""
-        print("\n" + "=" * 70)
-        print("[XGBoost] TRAINING (60+ Features)")
-        print("=" * 70)
+        print("\n" + "=" * print_length)
+        print("[XGBoost] TRAINING")
+        print("=" * print_length)
         
         model = xgb.XGBRegressor(
             n_estimators=500,
@@ -245,10 +234,9 @@ class Dream11ModelTrainer:
         return model
     
     def train_lightgbm(self):
-        """Train LightGBM model"""
-        print("\n" + "=" * 70)
-        print("[LightGBM] TRAINING (60+ Features)")
-        print("=" * 70)
+        print("\n" + "=" * print_length)
+        print("[LightGBM] TRAINING")
+        print("=" * print_length)
         
         cat_indices = [i for i, col in enumerate(self.X_train.columns) if col in self.categorical_features]
         
@@ -306,10 +294,9 @@ class Dream11ModelTrainer:
         return model
     
     def train_catboost(self):
-        """Train CatBoost model"""
-        print("\n" + "=" * 70)
-        print("[CatBoost] TRAINING (60+ Features)")
-        print("=" * 70)
+        print("\n" + "=" * print_length)
+        print("[CatBoost] TRAINING")
+        print("=" * print_length)
         
         cat_features = [col for col in self.categorical_features if col in self.X_train.columns]
         
@@ -362,10 +349,9 @@ class Dream11ModelTrainer:
         return model
     
     def create_ensemble(self):
-        """Create weighted ensemble"""
-        print("\n" + "=" * 70)
+        print("\n" + "=" * print_length)
         print("CREATING ENSEMBLE")
-        print("=" * 70)
+        print("=" * print_length)
         
         total_inverse_mae = sum(1/m['val_mae'] for m in self.models.values())
         
@@ -390,9 +376,9 @@ class Dream11ModelTrainer:
         
         ensemble_train_mae = mean_absolute_error(self.y_train, ensemble_train_pred)
         
-        print(f"\n{'='*70}")
+        print(f"\n{'='*print_length}")
         print("ENSEMBLE PERFORMANCE")
-        print("=" * 70)
+        print("=" * print_length)
         print(f"  Train MAE: {ensemble_train_mae:.2f}")
         print(f"  Val MAE:   {ensemble_mae:.2f}")
         print(f"  Val RMSE:  {ensemble_rmse:.2f}")
@@ -414,10 +400,9 @@ class Dream11ModelTrainer:
         return ensemble_pred
     
     def compare_all_models(self):
-        """Generate comparison report"""
-        print("\n" + "=" * 70)
+        print("\n" + "=" * print_length)
         print("MODEL COMPARISON SUMMARY")
-        print("=" * 70)
+        print("=" * print_length)
         
         sorted_models = sorted(self.all_results.items(), key=lambda x: x[1]['val_mae'])
         
@@ -441,10 +426,9 @@ class Dream11ModelTrainer:
             print(f"✓ Improvement over Linear Regression: {improvement:.1f}%")
     
     def save_models(self, model_name='ProductUIModel'):
-        """Save trained models and metadata"""
-        print("\n" + "=" * 70)
+        print("\n" + "=" * print_length)
         print("SAVING MODELS")
-        print("=" * 70)
+        print("=" * print_length)
         
         for name, model_dict in self.models.items():
             model_path = self.model_dir / f"{model_name}_{name}.pkl"
@@ -492,13 +476,12 @@ class Dream11ModelTrainer:
         print(f"\n✓ All models saved to: {self.model_dir}/")
     
     def train_full_pipeline(self, train_end_date='2024-06-30', model_name='ProductUIModel'):
-        """Execute complete training pipeline"""
-        print("\n" + "=" * 70)
-        print("DREAM11 MODEL TRAINING PIPELINE (60+ FEATURES)")
-        print("=" * 70)
+        print("\n" + "=" * print_length)
+        print("DREAM11 MODEL TRAINING PIPELINE")
+        print("=" * print_length)
         print(f"Model Name: {model_name}")
         print(f"Training Cutoff: {train_end_date}")
-        print("=" * 70)
+        print("=" * print_length)
         
         self.load_data(train_end_date)
         self.prepare_features()
@@ -511,11 +494,11 @@ class Dream11ModelTrainer:
         self.compare_all_models()
         self.save_models(model_name)
         
-        print("\n" + "=" * 70)
+        print("\n" + "=" * print_length)
         print("✓✓✓ TRAINING COMPLETE ✓✓✓")
-        print("=" * 70)
+        print("=" * print_length)
         print(f"\nBest Model: Ensemble (MAE: {self.ensemble_mae:.2f})")
-        print(f"Using {len(self.feature_cols)} features (Silver Medal Team approach)")
+        print(f"Using {len(self.feature_cols)} features")
         print(f"Models saved to: {self.model_dir}/")
         print("\nNext step: streamlit run main_app.py")
 

@@ -1,9 +1,3 @@
-"""
-Data Download Script for Dream11 Inter-IIT Project
-Uses cricketstats library following Silver Medal Team approach
-Closely follows Cricsheet JSON format
-"""
-
 from pathlib import Path
 from tqdm import tqdm
 import json
@@ -22,7 +16,6 @@ except ImportError:
     import cricketstats as cks
 
 def download_cricsheet_database(data_dir='data'):
-    """Download the complete Cricsheet all_json.zip database"""
     import requests
     
     raw_dir = Path(data_dir) / 'raw'
@@ -73,9 +66,6 @@ def download_cricsheet_database(data_dir='data'):
 
 def data_extracter(database, matchtype, from_date, to_date, data_dir='data'):
     """
-    Extract match-level innings data using cricketstats library
-    Follows Silver Medal Team's exact approach
-    
     Args:
         database: Path to all_json.zip
         matchtype: List of match types ['ODI', 'ODM', 'T20', 'IT20', 'Test', 'MDM']
@@ -142,9 +132,6 @@ def data_extracter(database, matchtype, from_date, to_date, data_dir='data'):
 
 def aggregate_points_json(database, matchtype, from_date, to_date, data_dir='data'):
     """
-    Extract aggregate player statistics and save as JSON
-    Follows Silver Medal Team's exact approach
-    
     Args:
         database: Path to all_json.zip
         matchtype: List of match types
@@ -221,14 +208,10 @@ def aggregate_points_json(database, matchtype, from_date, to_date, data_dir='dat
     return json_data
 
 def run_extraction_pipeline(cutoff_date='2024-06-30', data_dir='data'):
-    """
-    Run complete extraction pipeline
-    Extracts both training and test data (if available)
-    """
     print("\n" + "=" * print_length)
     print("DREAM11 INTER-IIT DATA EXTRACTION PIPELINE")
     print("=" * print_length)
-    print("Using cricketstats library (Silver Medal Team approach)")
+    print("Using cricketstats library")
     print(f"Training cutoff: {cutoff_date}")
     print("=" * print_length)
     

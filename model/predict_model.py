@@ -1,8 +1,3 @@
-"""
-Prediction Module for Dream11 Fantasy Points
-Handles expanded feature set (60+ features) with aggregate stats
-"""
-
 import pandas as pd
 import numpy as np
 from pathlib import Path
@@ -11,9 +6,7 @@ import json
 import warnings
 warnings.filterwarnings('ignore')
 
-class Dream11Predictor:
-    """Make predictions using trained ensemble models"""
-    
+class Dream11Predictor:    
     def __init__(self, model_dir='model_artifacts', model_name='ProductUIModel'):
         self.model_dir = Path(model_dir)
         self.model_name = model_name
@@ -58,7 +51,6 @@ class Dream11Predictor:
         print(f"✓ Loaded aggregate stats for {len(self.aggregate_data):,} players")
     
     def load_models(self):
-        """Load all trained models and metadata"""
         print("=" * 70)
         print("LOADING MODELS")
         print("=" * 70)
@@ -94,10 +86,6 @@ class Dream11Predictor:
         print("=" * 70)
     
     def prepare_prediction_features(self, player_features_df):
-        """
-        Prepare features for prediction
-        Now includes aggregate career stats
-        """
         # Ensure all required features are present
         missing_cols = [col for col in self.feature_cols if col not in player_features_df.columns]
         
@@ -135,7 +123,6 @@ class Dream11Predictor:
         return X
     
     def predict(self, player_features_df):
-        """Make ensemble predictions"""
         X = self.prepare_prediction_features(player_features_df)
         
         # Get predictions from each model
@@ -159,10 +146,6 @@ class Dream11Predictor:
         return result_df
     
     def get_player_recent_features(self, player_name, match_type='t20', num_recent=10):
-        """
-        Get recent match features for a player from training data
-        Used to calculate rolling averages
-        """
         training_data_path = self.data_dir / 'processed' / 'training_data_2024-06-30.csv'
         
         if not training_data_path.exists():
@@ -183,10 +166,6 @@ class Dream11Predictor:
         return player_data
     
     def calculate_features_for_upcoming_match(self, player_name, match_type='t20', venue='', opposition=''):
-        """
-        Calculate all features for a player for an upcoming match
-        Uses historical data only
-        """
         # Get recent match history
         recent_matches = self.get_player_recent_features(player_name, match_type)
         
@@ -266,8 +245,6 @@ class Dream11Predictor:
     
     def predict_for_squad(self, squad_players, match_type='t20', venue='', team1='', team2=''):
         """
-        Predict fantasy points for a squad of players
-        
         Args:
             squad_players: List of player names
             match_type: 't20' or 'odi'
@@ -297,7 +274,6 @@ class Dream11Predictor:
             return pd.DataFrame()
 
 def main():
-    """Test prediction module"""
     predictor = Dream11Predictor()
     
     # Test with sample players

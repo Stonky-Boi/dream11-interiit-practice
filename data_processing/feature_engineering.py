@@ -1,8 +1,3 @@
-"""
-Feature Engineering for Dream11 Fantasy Points Prediction
-COMPLETE Silver Medal Team Feature Set (60+ features)
-"""
-
 import pandas as pd
 import json
 from pathlib import Path
@@ -13,14 +8,6 @@ warnings.filterwarnings('ignore')
 print_length = 100
 
 class CricketFeatureEngineering:
-    """
-    Complete Silver Medal Team approach with ALL features:
-    - 35+ match-level features
-    - 25+ aggregate career statistics
-    - Rolling averages and form indicators
-    Total: 60+ features for maximum accuracy
-    """
-    
     def __init__(self, data_dir='data'):
         self.data_dir = Path(data_dir)
         self.raw_dir = self.data_dir / 'raw'
@@ -174,12 +161,8 @@ class CricketFeatureEngineering:
         return aggregate_data
     
     def calculate_comprehensive_features(self):
-        """
-        Calculate ALL Silver Medal Team features (60+ total)
-        CRITICAL: Only use historical data, NOT current match stats
-        """
         print("\n" + "=" * print_length)
-        print("CALCULATING COMPREHENSIVE FEATURES (60+ FEATURES)")
+        print("CALCULATING COMPREHENSIVE FEATURES")
         print("=" * print_length)
         
         training_data = []
@@ -425,12 +408,10 @@ class CricketFeatureEngineering:
         
         print(f"\n✓ Created {len(self.training_df):,} training records")
         print(f"✓ Base Features: {len(self.training_df.columns)}")
-        print("✓ ALL FEATURES USE HISTORICAL DATA ONLY (no leakage)")
         
         return self.training_df
     
     def create_rolling_features(self):
-        """Create rolling window features for recent form"""
         print("\n" + "=" * print_length)
         print("CREATING ROLLING FEATURES")
         print("=" * print_length)
@@ -461,7 +442,6 @@ class CricketFeatureEngineering:
         print(f"✓ Total Features Now: {len(self.training_df.columns)}")
     
     def identify_player_roles(self):
-        """Identify player roles based on career aggregate statistics"""
         print("\n" + "=" * print_length)
         print("IDENTIFYING PLAYER ROLES")
         print("=" * print_length)
@@ -482,8 +462,6 @@ class CricketFeatureEngineering:
         
         def classify_role(row):
             """
-            Classify player role based on career statistics
-            
             Logic:
             - Wicket-Keeper: Has career stumpings (typically 2+)
             - All-Rounder: Significant batting AND bowling
@@ -565,7 +543,6 @@ class CricketFeatureEngineering:
             print(f"  {role:15s}: {count:4,} players")
     
     def save_processed_data(self, filename='training_data_2024-06-30.csv'):
-        """Save final processed data"""
         output_path = self.processed_dir / filename
         self.training_df.to_csv(output_path, index=False)
         
@@ -598,7 +575,6 @@ class CricketFeatureEngineering:
         return output_path
     
     def run_full_pipeline(self):
-        """Execute complete feature engineering pipeline"""
         print("\n" + "=" * print_length)
         print("FEATURE ENGINEERING PIPELINE")
         print("=" * print_length)

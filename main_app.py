@@ -1,8 +1,3 @@
-"""
-Main Application - Dream11 Inter-IIT Project
-Entry point for both Product UI and Model UI
-"""
-
 import streamlit as st
 from pathlib import Path
 import sys
