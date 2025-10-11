@@ -142,7 +142,20 @@ const Index = () => {
   };
 
   return (
-    <div className="min-h-screen stadium-gradient flex flex-col">
+    <div className="min-h-screen flex flex-col relative">
+      {/* Background Image */}
+      <div 
+        className="fixed inset-0 -z-10"
+        style={{
+          backgroundImage: 'url(public/bgimage.jpg)',
+          backgroundSize: 'cover',
+          backgroundPosition: 'center',
+          backgroundRepeat: 'no-repeat',
+        }}
+      >
+        <div className="absolute inset-0 bg-gradient-to-b from-background/80 via-background/70 to-background/80" />
+      </div>
+
       {/* Header */}
       <header className="border-b border-border/50 backdrop-blur-sm bg-background/30">
         <div className="container mx-auto px-2 py-3 flex items-center justify-between gap-2">
@@ -166,8 +179,9 @@ const Index = () => {
               className="font-bold border-primary text-primary hover:bg-primary/10"
             >
               <Zap className="w-4 h-4 mr-2" />
-              Regenerate Best 11
+              Return Best 11
             </Button>
+            {/* Link to Model UI */ }
             <Link to="/model">
               <Button variant="outline" size="sm">
                 <Settings className="w-4 h-4 mr-2" />
@@ -213,7 +227,7 @@ const Index = () => {
 export default Index;
 
 
-
+// incaase needed for the future use: i/ps are date venure league ?? 
 
 // import { useState, useEffect } from 'react';
 // import { Player, TeamKPI } from '@/types/player';
