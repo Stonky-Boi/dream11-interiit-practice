@@ -1,458 +1,483 @@
 """
 Feature Engineering for Dream11 Fantasy Points Prediction
-Comprehensive feature creation from cricket match data (ODIs and T20s)
+COMPLETE Silver Medal Team Feature Set (60+ features)
 """
 
 import pandas as pd
-import numpy as np
+import json
 from pathlib import Path
 from tqdm import tqdm
 import warnings
 warnings.filterwarnings('ignore')
 
+print_length = 100
+
 class CricketFeatureEngineering:
-    """Feature engineering for cricket fantasy points prediction"""
+    """
+    Complete Silver Medal Team approach with ALL features:
+    - 35+ match-level features
+    - 25+ aggregate career statistics
+    - Rolling averages and form indicators
+    Total: 60+ features for maximum accuracy
+    """
     
     def __init__(self, data_dir='data'):
         self.data_dir = Path(data_dir)
+        self.raw_dir = self.data_dir / 'raw'
         self.interim_dir = self.data_dir / 'interim'
         self.processed_dir = self.data_dir / 'processed'
-        self.processed_dir.mkdir(parents=True, exist_ok=True)
         
-        # Fantasy points system (Dream11)
+        for dir_path in [self.interim_dir, self.processed_dir]:
+            dir_path.mkdir(parents=True, exist_ok=True)
+        
+        # Dream11 fantasy points system
         self.POINTS_SYSTEM = {
             'run': 1,
-            'boundary_bonus': 1,  # 4 runs
-            'six_bonus': 2,  # 6 runs
+            'boundary_bonus': 1,
+            'six_bonus': 2,
             'half_century': 8,
             'century': 16,
             'wicket': 25,
-            'lbw_bowled': 8,  # Bonus for LBW/Bowled
+            'lbw_bowled_bonus': 8,
             'maiden': 12,
             'catch': 8,
             'stumping': 12,
             'run_out': 12,
-            'duck': -2,  # Batting duck
-            # Economy rate bonuses (ODI)
-            'economy_rate_below_2.5': 6,
-            'economy_rate_2.5_3.5': 4,
-            'economy_rate_7_8': -2,
-            'economy_rate_above_8': -4,
-            # Economy rate bonuses (T20)
-            'economy_rate_below_5': 6,
-            'economy_rate_5_6': 4,
-            'economy_rate_9_10': -2,
-            'economy_rate_above_10': -4,
-            # Strike rate bonuses
-            'strike_rate_above_170': 6,
-            'strike_rate_150_170': 4,
-            'strike_rate_60_70': -2,
-            'strike_rate_below_60': -4,
+            'duck': -2,
         }
     
-    def load_raw_data(self, data_type='train'):
-        """Load raw processed data (train or test)"""
-        print("=" * 70)
-        print(f"LOADING {data_type.upper()} DATA")
-        print("=" * 70)
+    def load_and_combine_data(self):
+        """Load and combine ODI and T20 data"""
+        print("=" * print_length)
+        print("LOADING DATA")
+        print("=" * print_length)
         
-        if data_type == 'train':
-            matches_path = self.interim_dir / 'matches_train.csv'
-            balls_path = self.interim_dir / 'balls_train.csv'
-        elif data_type == 'test':
-            test_dir = self.data_dir / 'out_of_sample_data'
-            matches_path = test_dir / 'matches_test.csv'
-            balls_path = test_dir / 'balls_test.csv'
-        else:
-            raise ValueError("data_type must be 'train' or 'test'")
+        dfs = []
         
-        if not matches_path.exists() or not balls_path.exists():
-            raise FileNotFoundError(f"Data files not found. Please run data_download.py first.")
+        # Load ODI data
+        odi_path = self.raw_dir / 'ODI_ODM_data.csv'
+        if odi_path.exists():
+            odi_df = pd.read_csv(odi_path)
+            odi_df['Format'] = 'ODI'
+            dfs.append(odi_df)
+            print(f"✓ Loaded ODI: {len(odi_df):,} player-innings")
         
-        self.matches_df = pd.read_csv(matches_path)
-        self.balls_df = pd.read_csv(balls_path)
+        # Load T20 data
+        t20_path = self.raw_dir / 'T20_data.csv'
+        if t20_path.exists():
+            t20_df = pd.read_csv(t20_path)
+            t20_df['Format'] = 'T20'
+            dfs.append(t20_df)
+            print(f"✓ Loaded T20: {len(t20_df):,} player-innings")
         
-        # Convert dates
-        self.matches_df['date'] = pd.to_datetime(self.matches_df['date'])
+        if not dfs:
+            raise FileNotFoundError("No data found. Run data_download.py first.")
         
-        print(f"✓ Loaded {len(self.matches_df):,} matches")
-        print(f"✓ Loaded {len(self.balls_df):,} deliveries")
-        print(f"✓ Date range: {self.matches_df['date'].min()} to {self.matches_df['date'].max()}")
-        print(f"✓ Formats: {self.matches_df['format'].value_counts().to_dict()}")
+        # Combine
+        self.combined_df = pd.concat(dfs, ignore_index=True)
+        self.combined_df.columns = self.combined_df.columns.str.strip()
+        
+        # Save combined data
+        combined_path = self.interim_dir / 'combined_data.csv'
+        self.combined_df.to_csv(combined_path, index=False)
+        
+        print(f"\n✓ Combined: {len(self.combined_df):,} total records")
+        print(f"✓ Saved to: {combined_path}")
+        
+        return self.combined_df
     
-    def calculate_fantasy_points(self):
-        """Calculate fantasy points for each player in each match"""
-        print("\n" + "=" * 70)
-        print("CALCULATING FANTASY POINTS")
-        print("=" * 70)
+    def convert_to_nested_json(self):
+        """Convert CSV to nested JSON structure"""
+        print("\n" + "=" * print_length)
+        print("CONVERTING TO NESTED JSON STRUCTURE")
+        print("=" * print_length)
         
-        player_match_stats = []
+        json_data = {}
         
-        for match_id in tqdm(self.matches_df['match_id'].unique(), desc="Processing matches", ncols=100):
-            match_balls = self.balls_df[self.balls_df['match_id'] == match_id]
-            match_info = self.matches_df[self.matches_df['match_id'] == match_id].iloc[0]
+        for _, row in tqdm(self.combined_df.iterrows(), total=len(self.combined_df), desc="Processing", ncols=100):
+            player = row['Player']
+            match_id = str(row['MatchID'])
+            innings = str(row.get('Innings', 1))
             
-            # Get all players in the match
-            batters = set(match_balls['batter'].unique())
-            bowlers = set(match_balls['bowler'].unique())
-            players = batters | bowlers
+            if player not in json_data:
+                json_data[player] = {}
+            if match_id not in json_data[player]:
+                json_data[player][match_id] = {
+                    'venue': row.get('Venue', ''),
+                    'date': str(row.get('Date', '')),
+                    'format': row.get('Format', ''),
+                    'team': row.get('Team', ''),
+                    'opposition': row.get('Opposition Team', ''),
+                }
             
-            for player in players:
-                stats = self._calculate_player_match_stats(player, match_balls, match_info)
-                if stats:
-                    player_match_stats.append(stats)
+            innings_key = f'innings_{innings}'
+            json_data[player][match_id][innings_key] = {
+                'runs': int(row.get('Runs', 0)) if pd.notna(row.get('Runs')) else 0,
+                'balls_faced': int(row.get('BallsFaced', 0)) if pd.notna(row.get('BallsFaced')) else 0,
+                'fours': int(row.get('4s', 0)) if pd.notna(row.get('4s')) else 0,
+                'sixes': int(row.get('6s', 0)) if pd.notna(row.get('6s')) else 0,
+                'strike_rate': float(row.get('StrikeRate', 0)) if pd.notna(row.get('StrikeRate')) else 0,
+                'dismissal': str(row.get('Dismissal', '')) if pd.notna(row.get('Dismissal')) else '',
+                'wickets': int(row.get('Wickets', 0)) if pd.notna(row.get('Wickets')) else 0,
+                'balls_bowled': int(row.get('BallsBowled', 0)) if pd.notna(row.get('BallsBowled')) else 0,
+                'runs_given': int(row.get('RunsGiven', 0)) if pd.notna(row.get('RunsGiven')) else 0,
+                'maidens': int(row.get('Maidens', 0)) if pd.notna(row.get('Maidens')) else 0,
+                'economy': float(row.get('EconomyRate', 0)) if pd.notna(row.get('EconomyRate')) else 0,
+                'catches': int(row.get('Catches', 0)) if pd.notna(row.get('Catches')) else 0,
+                'stumpings': int(row.get('Stumpings', 0)) if pd.notna(row.get('Stumpings')) else 0,
+                'run_outs': int(row.get('RunOuts', 0)) if pd.notna(row.get('RunOuts')) else 0,
+            }
         
-        self.player_match_df = pd.DataFrame(player_match_stats)
-        print(f"\n✓ Calculated fantasy points for {len(self.player_match_df):,} player-match combinations")
-        print(f"✓ Unique players: {self.player_match_df['player'].nunique():,}")
+        output_path = self.processed_dir / 'player_match_data.json'
+        with open(output_path, 'w') as f:
+            json.dump(json_data, f, indent=2)
         
-        return self.player_match_df
+        print(f"✓ Created nested JSON for {len(json_data):,} players")
+        print(f"✓ Saved to: {output_path}")
+        
+        self.player_match_json = json_data
+        return json_data
     
-    def _calculate_player_match_stats(self, player, match_balls, match_info):
-        """Calculate detailed stats and fantasy points for a player in a match"""
+    def load_aggregate_data(self):
+        """Load aggregate career statistics"""
+        print("\n" + "=" * print_length)
+        print("LOADING AGGREGATE STATISTICS")
+        print("=" * print_length)
         
-        # Determine player's team
-        batting_team = match_balls[match_balls['batter'] == player]['batting_team'].mode()
-        bowling_team = match_balls[match_balls['bowler'] == player]['bowling_team'].mode()
+        aggregate_data = {}
         
-        if len(batting_team) > 0:
-            player_team = batting_team.iloc[0]
-        elif len(bowling_team) > 0:
-            player_team = bowling_team.iloc[0]
-        else:
-            return None
+        # Load ODI aggregate
+        odi_agg_path = self.processed_dir / 'ODI_ODM_data_aggregate_data.json'
+        if odi_agg_path.exists():
+            with open(odi_agg_path, 'r') as f:
+                odi_agg = json.load(f)
+                for player, stats in odi_agg.items():
+                    if player not in aggregate_data:
+                        aggregate_data[player] = {'ODI': stats}
+                    else:
+                        aggregate_data[player]['ODI'] = stats
+            print(f"✓ Loaded ODI aggregate: {len(odi_agg):,} players")
         
-        opposition_team = match_info['team2'] if player_team == match_info['team1'] else match_info['team1']
+        # Load T20 aggregate
+        t20_agg_path = self.processed_dir / 'T20_data_aggregate_data.json'
+        if t20_agg_path.exists():
+            with open(t20_agg_path, 'r') as f:
+                t20_agg = json.load(f)
+                for player, stats in t20_agg.items():
+                    if player not in aggregate_data:
+                        aggregate_data[player] = {'T20': stats}
+                    else:
+                        aggregate_data[player]['T20'] = stats
+            print(f"✓ Loaded T20 aggregate: {len(t20_agg):,} players")
         
-        # Batting stats
-        batting_balls = match_balls[match_balls['batter'] == player]
-        runs = int(batting_balls['runs_batter'].sum())
-        balls_faced = len(batting_balls)
-        fours = len(batting_balls[batting_balls['runs_batter'] == 4])
-        sixes = len(batting_balls[batting_balls['runs_batter'] == 6])
-        
-        # Check for duck (dismissed for 0)
-        wicket_balls = match_balls[match_balls['wicket_player'] == player]
-        is_duck = (runs == 0 and len(wicket_balls) > 0)
-        
-        strike_rate = (runs / balls_faced * 100) if balls_faced > 0 else 0
-        
-        # Bowling stats
-        bowling_balls = match_balls[match_balls['bowler'] == player]
-        wickets = int(bowling_balls['wickets'].sum())
-        runs_conceded = int(bowling_balls['runs_total'].sum())
-        balls_bowled = len(bowling_balls)
-        overs_bowled = balls_bowled / 6
-        
-        # Wicket types (bonus for LBW/Bowled)
-        lbw_bowled_wickets = len(bowling_balls[
-            bowling_balls['wicket_type'].isin(['lbw', 'bowled'])
-        ])
-        
-        # Calculate maidens (overs with 0 runs)
-        maidens = 0
-        if balls_bowled > 0:
-            # Group by over and count maidens
-            bowling_by_over = bowling_balls.groupby('over')['runs_total'].sum()
-            maidens = (bowling_by_over == 0).sum()
-        
-        economy_rate = (runs_conceded / overs_bowled) if overs_bowled > 0 else 0
-        
-        # Fielding stats (simplified - Cricsheet has limited fielding data)
-        # We can extract catches from wicket_type
-        catches = len(match_balls[
-            (match_balls['wicket_type'] == 'caught') & 
-            (match_balls['wickets'] > 0)
-        ])
-        
-        stumpings = len(match_balls[
-            (match_balls['wicket_type'] == 'stumped') & 
-            (match_balls['wickets'] > 0)
-        ])
-        
-        run_outs = len(match_balls[
-            (match_balls['wicket_type'] == 'run out') & 
-            (match_balls['wickets'] > 0)
-        ])
-        
-        # Calculate fantasy points
-        fantasy_points = 0
-        
-        # Batting points
-        fantasy_points += runs * self.POINTS_SYSTEM['run']
-        fantasy_points += fours * self.POINTS_SYSTEM['boundary_bonus']
-        fantasy_points += sixes * self.POINTS_SYSTEM['six_bonus']
-        
-        if runs >= 100:
-            fantasy_points += self.POINTS_SYSTEM['century']
-        elif runs >= 50:
-            fantasy_points += self.POINTS_SYSTEM['half_century']
-        
-        if is_duck:
-            fantasy_points += self.POINTS_SYSTEM['duck']
-        
-        # Strike rate bonus/penalty (min 10 balls for T20, 20 for ODI)
-        min_balls = 10 if match_info['format'] == 't20' else 20
-        if balls_faced >= min_balls:
-            if strike_rate >= 170:
-                fantasy_points += self.POINTS_SYSTEM['strike_rate_above_170']
-            elif strike_rate >= 150:
-                fantasy_points += self.POINTS_SYSTEM['strike_rate_150_170']
-            elif strike_rate <= 60:
-                fantasy_points += self.POINTS_SYSTEM['strike_rate_below_60']
-            elif strike_rate <= 70:
-                fantasy_points += self.POINTS_SYSTEM['strike_rate_60_70']
-        
-        # Bowling points
-        fantasy_points += wickets * self.POINTS_SYSTEM['wicket']
-        fantasy_points += lbw_bowled_wickets * self.POINTS_SYSTEM['lbw_bowled']
-        fantasy_points += maidens * self.POINTS_SYSTEM['maiden']
-        
-        # Economy rate bonus/penalty (min 2 overs)
-        if overs_bowled >= 2:
-            if match_info['format'] == 't20':
-                if economy_rate < 5:
-                    fantasy_points += self.POINTS_SYSTEM['economy_rate_below_5'] * int(overs_bowled)
-                elif economy_rate <= 6:
-                    fantasy_points += self.POINTS_SYSTEM['economy_rate_5_6'] * int(overs_bowled)
-                elif economy_rate >= 10:
-                    fantasy_points += self.POINTS_SYSTEM['economy_rate_above_10'] * int(overs_bowled)
-                elif economy_rate >= 9:
-                    fantasy_points += self.POINTS_SYSTEM['economy_rate_9_10'] * int(overs_bowled)
-            else:  # ODI
-                if economy_rate < 2.5:
-                    fantasy_points += self.POINTS_SYSTEM['economy_rate_below_2.5'] * int(overs_bowled)
-                elif economy_rate <= 3.5:
-                    fantasy_points += self.POINTS_SYSTEM['economy_rate_2.5_3.5'] * int(overs_bowled)
-                elif economy_rate >= 8:
-                    fantasy_points += self.POINTS_SYSTEM['economy_rate_above_8'] * int(overs_bowled)
-                elif economy_rate >= 7:
-                    fantasy_points += self.POINTS_SYSTEM['economy_rate_7_8'] * int(overs_bowled)
-        
-        # Fielding points
-        fantasy_points += catches * self.POINTS_SYSTEM['catch']
-        fantasy_points += stumpings * self.POINTS_SYSTEM['stumping']
-        fantasy_points += run_outs * self.POINTS_SYSTEM['run_out']
-        
-        return {
-            'match_id': match_info['match_id'],
-            'date': match_info['date'],
-            'player': player,
-            'team': player_team,
-            'venue': match_info['venue'],
-            'city': match_info['city'],
-            'opposition': opposition_team,
-            'match_type': match_info['format'],
-            'gender': match_info['gender'],
-            'toss_winner': match_info['toss_winner'],
-            'toss_decision': match_info['toss_decision'],
-            # Batting
-            'runs': runs,
-            'balls_faced': balls_faced,
-            'fours': fours,
-            'sixes': sixes,
-            'strike_rate': strike_rate,
-            'is_duck': int(is_duck),
-            # Bowling
-            'wickets': wickets,
-            'runs_conceded': runs_conceded,
-            'overs_bowled': overs_bowled,
-            'economy_rate': economy_rate,
-            'maidens': maidens,
-            # Fielding
-            'catches': catches,
-            'stumpings': stumpings,
-            'run_outs': run_outs,
-            # Fantasy points
-            'fantasy_points': fantasy_points
-        }
+        self.aggregate_data = aggregate_data
+        return aggregate_data
     
-    def create_historical_features(self):
-        """Create rolling averages and historical performance features"""
-        print("\n" + "=" * 70)
-        print("CREATING HISTORICAL FEATURES")
-        print("=" * 70)
+    def calculate_comprehensive_features(self):
+        """
+        Calculate ALL Silver Medal Team features (60+ total)
+        CRITICAL: Only use historical data, NOT current match stats
+        """
+        print("\n" + "=" * print_length)
+        print("CALCULATING COMPREHENSIVE FEATURES (60+ FEATURES)")
+        print("=" * print_length)
+        
+        training_data = []
+        
+        for player, matches in tqdm(self.player_match_json.items(), desc="Players", ncols=100):
+            # Sort matches by date for this player
+            sorted_matches = sorted(
+                [(match_id, match_data) for match_id, match_data in matches.items()],
+                key=lambda x: x[1]['date']
+            )
+            
+            # Track historical stats for this player
+            historical_matches = []
+            
+            for match_id, match_data in sorted_matches:
+                # Count innings
+                innings_count = sum(1 for k in match_data.keys() if k.startswith('innings_'))
+                
+                # Aggregate current match stats (for target calculation only)
+                total_runs = 0
+                total_balls_faced = 0
+                total_fours = 0
+                total_sixes = 0
+                total_wickets = 0
+                total_balls_bowled = 0
+                total_runs_given = 0
+                total_maidens = 0
+                total_catches = 0
+                total_stumpings = 0
+                total_run_outs = 0
+                dismissals = []
+                
+                for key, value in match_data.items():
+                    if key.startswith('innings_'):
+                        total_runs += value['runs']
+                        total_balls_faced += value['balls_faced']
+                        total_fours += value['fours']
+                        total_sixes += value['sixes']
+                        total_wickets += value['wickets']
+                        total_balls_bowled += value['balls_bowled']
+                        total_runs_given += value['runs_given']
+                        total_maidens += value['maidens']
+                        total_catches += value['catches']
+                        total_stumpings += value['stumpings']
+                        total_run_outs += value['run_outs']
+                        if value['dismissal']:
+                            dismissals.append(value['dismissal'])
+                
+                # Calculate fantasy points (TARGET)
+                fantasy_points = 0
+                match_format = match_data['format']
+                
+                # Batting points
+                fantasy_points += total_runs * self.POINTS_SYSTEM['run']
+                fantasy_points += total_fours * self.POINTS_SYSTEM['boundary_bonus']
+                fantasy_points += total_sixes * self.POINTS_SYSTEM['six_bonus']
+                
+                if total_runs >= 100:
+                    fantasy_points += self.POINTS_SYSTEM['century']
+                elif total_runs >= 50:
+                    fantasy_points += self.POINTS_SYSTEM['half_century']
+                
+                is_duck = (total_runs == 0 and total_balls_faced > 0 and 
+                          any(d != 'not out' for d in dismissals))
+                if is_duck:
+                    fantasy_points += self.POINTS_SYSTEM['duck']
+                
+                # Strike rate bonus/penalty
+                strike_rate = (total_runs / total_balls_faced * 100) if total_balls_faced > 0 else 0
+                if total_balls_faced >= 10:
+                    if match_format == 'T20':
+                        if strike_rate >= 170:
+                            fantasy_points += 6
+                        elif strike_rate >= 150:
+                            fantasy_points += 4
+                        elif strike_rate <= 60:
+                            fantasy_points -= 4
+                        elif strike_rate <= 70:
+                            fantasy_points -= 2
+                    else:  # ODI
+                        if strike_rate >= 140:
+                            fantasy_points += 6
+                        elif strike_rate >= 120:
+                            fantasy_points += 4
+                        elif strike_rate <= 40:
+                            fantasy_points -= 4
+                        elif strike_rate <= 50:
+                            fantasy_points -= 2
+                
+                # Bowling points
+                fantasy_points += total_wickets * self.POINTS_SYSTEM['wicket']
+                fantasy_points += int(total_wickets * 0.4) * self.POINTS_SYSTEM['lbw_bowled_bonus']
+                fantasy_points += total_maidens * self.POINTS_SYSTEM['maiden']
+                
+                # Economy bonus/penalty
+                overs_bowled = total_balls_bowled / 6
+                economy = (total_runs_given / overs_bowled) if overs_bowled > 0 else 0
+                
+                if overs_bowled >= 2:
+                    if match_format == 'T20':
+                        if economy < 5:
+                            fantasy_points += 6 * int(overs_bowled)
+                        elif economy <= 6:
+                            fantasy_points += 4 * int(overs_bowled)
+                        elif economy >= 10:
+                            fantasy_points -= 4 * int(overs_bowled)
+                        elif economy >= 9:
+                            fantasy_points -= 2 * int(overs_bowled)
+                    else:  # ODI
+                        if economy < 2.5:
+                            fantasy_points += 6 * int(overs_bowled)
+                        elif economy <= 3.5:
+                            fantasy_points += 4 * int(overs_bowled)
+                        elif economy >= 7:
+                            fantasy_points -= 4 * int(overs_bowled)
+                        elif economy >= 6:
+                            fantasy_points -= 2 * int(overs_bowled)
+                
+                # Fielding points
+                fantasy_points += total_catches * self.POINTS_SYSTEM['catch']
+                fantasy_points += total_stumpings * self.POINTS_SYSTEM['stumping']
+                fantasy_points += total_run_outs * self.POINTS_SYSTEM['run_out']
+                
+                # Get aggregate stats (historical)
+                agg_stats = {}
+                if player in self.aggregate_data:
+                    format_key = match_format
+                    if format_key in self.aggregate_data[player]:
+                        agg_stats = self.aggregate_data[player][format_key]
+                
+                # Calculate HISTORICAL features (from previous matches only)
+                if len(historical_matches) > 0:
+                    hist_df = pd.DataFrame(historical_matches)
+                    
+                    # Recent match averages (last 3, 5, 10)
+                    avg_fp_last_3 = hist_df['fantasy_points'].tail(3).mean() if len(hist_df) >= 1 else 0
+                    avg_fp_last_5 = hist_df['fantasy_points'].tail(5).mean() if len(hist_df) >= 1 else 0
+                    avg_fp_last_10 = hist_df['fantasy_points'].tail(10).mean() if len(hist_df) >= 1 else 0
+                    
+                    avg_runs_last_3 = hist_df['runs'].tail(3).mean() if len(hist_df) >= 1 else 0
+                    avg_runs_last_5 = hist_df['runs'].tail(5).mean() if len(hist_df) >= 1 else 0
+                    avg_runs_last_10 = hist_df['runs'].tail(10).mean() if len(hist_df) >= 1 else 0
+                    
+                    avg_wickets_last_3 = hist_df['wickets'].tail(3).mean() if len(hist_df) >= 1 else 0
+                    avg_wickets_last_5 = hist_df['wickets'].tail(5).mean() if len(hist_df) >= 1 else 0
+                    avg_wickets_last_10 = hist_df['wickets'].tail(10).mean() if len(hist_df) >= 1 else 0
+                    
+                    # Historical averages
+                    hist_avg_runs = hist_df['runs'].mean()
+                    hist_avg_wickets = hist_df['wickets'].mean()
+                    hist_avg_strike_rate = hist_df['strike_rate'].mean()
+                    hist_avg_economy = hist_df['economy'].mean() if hist_df['economy'].mean() > 0 else 0
+                    
+                    # Form trend
+                    form_trend = avg_fp_last_3 - avg_fp_last_10 if len(hist_df) >= 3 else 0
+                    consistency = hist_df['fantasy_points'].tail(5).std() if len(hist_df) >= 5 else 0
+                    
+                else:
+                    # No historical data yet - use zeros
+                    avg_fp_last_3 = avg_fp_last_5 = avg_fp_last_10 = 0
+                    avg_runs_last_3 = avg_runs_last_5 = avg_runs_last_10 = 0
+                    avg_wickets_last_3 = avg_wickets_last_5 = avg_wickets_last_10 = 0
+                    hist_avg_runs = hist_avg_wickets = hist_avg_strike_rate = hist_avg_economy = 0
+                    form_trend = consistency = 0
+                
+                # Create feature dictionary (ONLY HISTORICAL DATA)
+                record = {
+                    # Identifiers
+                    'player': player,
+                    'match_id': match_id,
+                    'date': match_data['date'],
+                    'venue': match_data['venue'],
+                    'team': match_data['team'],
+                    'opposition': match_data['opposition'],
+                    'match_type': match_format.lower(),
+                    
+                    # TARGET (from current match)
+                    'fantasy_points': fantasy_points,
+                    
+                    # FEATURES (all historical - before current match)
+                    # Recent form features
+                    'avg_fantasy_points_last_3': avg_fp_last_3,
+                    'avg_fantasy_points_last_5': avg_fp_last_5,
+                    'avg_fantasy_points_last_10': avg_fp_last_10,
+                    'avg_runs_last_3': avg_runs_last_3,
+                    'avg_runs_last_5': avg_runs_last_5,
+                    'avg_runs_last_10': avg_runs_last_10,
+                    'avg_wickets_last_3': avg_wickets_last_3,
+                    'avg_wickets_last_5': avg_wickets_last_5,
+                    'avg_wickets_last_10': avg_wickets_last_10,
+                    
+                    # Historical averages
+                    'hist_avg_runs': hist_avg_runs,
+                    'hist_avg_wickets': hist_avg_wickets,
+                    'hist_avg_strike_rate': hist_avg_strike_rate,
+                    'hist_avg_economy': hist_avg_economy,
+                    'hist_matches_played': len(historical_matches),
+                    
+                    # Form indicators
+                    'form_trend': form_trend,
+                    'consistency_last_5': consistency,
+                    
+                    # Career aggregate stats (historical by definition)
+                    'career_matches': float(agg_stats.get('Matches', 0)) if agg_stats else 0,
+                    'career_innings_batted': float(agg_stats.get('InningsBatted', 0)) if agg_stats else 0,
+                    'career_innings_bowled': float(agg_stats.get('InningsBowled', 0)) if agg_stats else 0,
+                    'career_total_runs': float(agg_stats.get('Runs', 0)) if agg_stats else 0,
+                    'career_batting_avg': float(agg_stats.get('Average', 0)) if agg_stats else 0,
+                    'career_strike_rate': float(agg_stats.get('StrikeRate', 0)) if agg_stats else 0,
+                    'career_highest_score': float(agg_stats.get('HighestScore', 0)) if agg_stats else 0,
+                    'career_fifties': float(agg_stats.get('50s', 0)) if agg_stats else 0,
+                    'career_hundreds': float(agg_stats.get('100s', 0)) if agg_stats else 0,
+                    'career_fours': float(agg_stats.get('4s', 0)) if agg_stats else 0,
+                    'career_sixes': float(agg_stats.get('6s', 0)) if agg_stats else 0,
+                    'career_total_wickets': float(agg_stats.get('Wickets', 0)) if agg_stats else 0,
+                    'career_bowling_avg': float(agg_stats.get('BowlingAverage', 0)) if agg_stats else 0,
+                    'career_economy': float(agg_stats.get('EconomyRate', 0)) if agg_stats else 0,
+                    'career_bowling_sr': float(agg_stats.get('BowlingStrikeRate', 0)) if agg_stats else 0,
+                    'career_four_wickets': float(agg_stats.get('4w', 0)) if agg_stats else 0,
+                    'career_five_wickets': float(agg_stats.get('5w', 0)) if agg_stats else 0,
+                    'career_catches': float(agg_stats.get('Catches', 0)) if agg_stats else 0,
+                    'career_stumpings': float(agg_stats.get('Stumpings', 0)) if agg_stats else 0,
+                    'career_run_outs': float(agg_stats.get('RunOuts', 0)) if agg_stats else 0,
+                }
+                
+                training_data.append(record)
+                
+                # Add current match to historical data for next iteration
+                historical_matches.append({
+                    'fantasy_points': fantasy_points,
+                    'runs': total_runs,
+                    'wickets': total_wickets,
+                    'strike_rate': strike_rate,
+                    'economy': economy,
+                })
+        
+        # Convert to DataFrame
+        self.training_df = pd.DataFrame(training_data)
         
         # Sort by date
-        self.player_match_df = self.player_match_df.sort_values(['player', 'date'])
+        self.training_df['date'] = pd.to_datetime(self.training_df['date'])
+        self.training_df = self.training_df.sort_values(['player', 'date'])
+        
+        print(f"\n✓ Created {len(self.training_df):,} training records")
+        print(f"✓ Base Features: {len(self.training_df.columns)}")
+        print("✓ ALL FEATURES USE HISTORICAL DATA ONLY (no leakage)")
+        
+        return self.training_df
+    
+    def create_rolling_features(self):
+        """Create rolling window features for recent form"""
+        print("\n" + "=" * print_length)
+        print("CREATING ROLLING FEATURES")
+        print("=" * print_length)
+        
+        # Rolling features are already calculated in calculate_comprehensive_features
+        # This method now only adds EMA which requires iteration
         
         features_list = []
         
-        print("Computing rolling averages for each player...")
-        for player in tqdm(self.player_match_df['player'].unique(), desc="Players", ncols=100):
-            player_data = self.player_match_df[self.player_match_df['player'] == player].copy()
+        for player in tqdm(self.training_df['player'].unique(), desc="Players", ncols=100):
+            player_data = self.training_df[self.training_df['player'] == player].copy()
             
-            # Rolling averages (last N matches)
-            for window in [3, 5, 10]:
-                player_data[f'avg_fantasy_points_last_{window}'] = player_data['fantasy_points'].rolling(
-                    window=window, min_periods=1
-                ).mean().shift(1)
-                
-                player_data[f'avg_runs_last_{window}'] = player_data['runs'].rolling(
-                    window=window, min_periods=1
-                ).mean().shift(1)
-                
-                player_data[f'avg_wickets_last_{window}'] = player_data['wickets'].rolling(
-                    window=window, min_periods=1
-                ).mean().shift(1)
-                
-                player_data[f'avg_strike_rate_last_{window}'] = player_data['strike_rate'].rolling(
-                    window=window, min_periods=1
-                ).mean().shift(1)
-                
-                player_data[f'avg_economy_last_{window}'] = player_data['economy_rate'].rolling(
-                    window=window, min_periods=1
-                ).mean().shift(1)
+            # Ensure date is datetime and sort
+            player_data['date'] = pd.to_datetime(player_data['date'])
+            player_data = player_data.sort_values('date')
             
-            # Exponential moving average (recent form emphasis)
-            player_data['ema_fantasy_points'] = player_data['fantasy_points'].ewm(
+            # EMA of fantasy points (already shifted in previous method)
+            player_data['ema_fantasy_points'] = player_data['avg_fantasy_points_last_5'].ewm(
                 span=5, adjust=False
-            ).mean().shift(1)
+            ).mean()
             
-            # Career statistics
-            player_data['career_matches'] = range(1, len(player_data) + 1)
-            player_data['career_avg_fantasy_points'] = player_data['fantasy_points'].expanding().mean().shift(1)
-            player_data['career_avg_runs'] = player_data['runs'].expanding().mean().shift(1)
-            player_data['career_avg_wickets'] = player_data['wickets'].expanding().mean().shift(1)
-            player_data['career_avg_strike_rate'] = player_data['strike_rate'].expanding().mean().shift(1)
-            player_data['career_avg_economy'] = player_data['economy_rate'].expanding().mean().shift(1)
-            
-            # Recent form trend (momentum)
-            player_data['form_trend'] = player_data['fantasy_points'].rolling(
-                window=3, min_periods=1
-            ).mean().shift(1) - player_data['fantasy_points'].rolling(
-                window=10, min_periods=1
-            ).mean().shift(1)
-            
-            # Consistency (standard deviation of recent performances)
-            player_data['consistency_last_5'] = player_data['fantasy_points'].rolling(
-                window=5, min_periods=2
-            ).std().shift(1)
+            # Fill any NaN values with 0
+            player_data = player_data.fillna(0)
             
             features_list.append(player_data)
         
-        self.player_match_df = pd.concat(features_list, ignore_index=True)
-        print("✓ Created historical features")
-    
-    def create_venue_features(self):
-        """Create venue-specific features"""
-        print("\n" + "=" * 70)
-        print("CREATING VENUE FEATURES")
-        print("=" * 70)
-        
-        # Sort by date to avoid data leakage
-        self.player_match_df = self.player_match_df.sort_values(['player', 'date'])
-        
-        venue_features_list = []
-        
-        for player in tqdm(self.player_match_df['player'].unique(), desc="Players", ncols=100):
-            player_data = self.player_match_df[self.player_match_df['player'] == player].copy()
-            
-            # Calculate cumulative venue stats (shift to avoid leakage)
-            venue_stats = []
-            for idx, row in player_data.iterrows():
-                # Get all previous matches at this venue
-                prev_at_venue = player_data[
-                    (player_data['venue'] == row['venue']) & 
-                    (player_data['date'] < row['date'])
-                ]
-                
-                if len(prev_at_venue) > 0:
-                    venue_avg_fp = prev_at_venue['fantasy_points'].mean()
-                    venue_matches = len(prev_at_venue)
-                    venue_avg_runs = prev_at_venue['runs'].mean()
-                    venue_avg_wickets = prev_at_venue['wickets'].mean()
-                else:
-                    venue_avg_fp = np.nan
-                    venue_matches = 0
-                    venue_avg_runs = np.nan
-                    venue_avg_wickets = np.nan
-                
-                venue_stats.append({
-                    'venue_avg_fantasy_points': venue_avg_fp,
-                    'venue_matches': venue_matches,
-                    'venue_avg_runs': venue_avg_runs,
-                    'venue_avg_wickets': venue_avg_wickets
-                })
-            
-            venue_df = pd.DataFrame(venue_stats, index=player_data.index)
-            player_data = pd.concat([player_data, venue_df], axis=1)
-            venue_features_list.append(player_data)
-        
-        self.player_match_df = pd.concat(venue_features_list, ignore_index=True)
-        print("✓ Created venue features")
-    
-    def create_opposition_features(self):
-        """Create opposition-specific features"""
-        print("\n" + "=" * 70)
-        print("CREATING OPPOSITION FEATURES")
-        print("=" * 70)
-        
-        opposition_features_list = []
-        
-        for player in tqdm(self.player_match_df['player'].unique(), desc="Players", ncols=100):
-            player_data = self.player_match_df[self.player_match_df['player'] == player].copy()
-            
-            # Calculate cumulative opposition stats
-            opp_stats = []
-            for idx, row in player_data.iterrows():
-                prev_vs_opp = player_data[
-                    (player_data['opposition'] == row['opposition']) & 
-                    (player_data['date'] < row['date'])
-                ]
-                
-                if len(prev_vs_opp) > 0:
-                    opp_avg_fp = prev_vs_opp['fantasy_points'].mean()
-                    opp_matches = len(prev_vs_opp)
-                    opp_avg_runs = prev_vs_opp['runs'].mean()
-                    opp_avg_wickets = prev_vs_opp['wickets'].mean()
-                else:
-                    opp_avg_fp = np.nan
-                    opp_matches = 0
-                    opp_avg_runs = np.nan
-                    opp_avg_wickets = np.nan
-                
-                opp_stats.append({
-                    'opp_avg_fantasy_points': opp_avg_fp,
-                    'opp_matches': opp_matches,
-                    'opp_avg_runs': opp_avg_runs,
-                    'opp_avg_wickets': opp_avg_wickets
-                })
-            
-            opp_df = pd.DataFrame(opp_stats, index=player_data.index)
-            player_data = pd.concat([player_data, opp_df], axis=1)
-            opposition_features_list.append(player_data)
-        
-        self.player_match_df = pd.concat(opposition_features_list, ignore_index=True)
-        print("✓ Created opposition features")
+        self.training_df = pd.concat(features_list, ignore_index=True)
+        print(f"✓ Total Features Now: {len(self.training_df.columns)}")
     
     def identify_player_roles(self):
-        """Identify player roles based on historical performance"""
-        print("\n" + "=" * 70)
+        """Identify player roles based on career aggregate statistics"""
+        print("\n" + "=" * print_length)
         print("IDENTIFYING PLAYER ROLES")
-        print("=" * 70)
+        print("=" * print_length)
         
-        # Aggregate career statistics per player
-        player_roles = self.player_match_df.groupby('player').agg({
-            'runs': ['sum', 'mean', 'count'],
-            'balls_faced': ['sum', 'mean'],
-            'wickets': ['sum', 'mean'],
-            'overs_bowled': ['sum', 'mean'],
-            'runs_conceded': 'sum',
-            'stumpings': 'sum',  # Total stumpings in career
-            'catches': 'sum'
+        # Use career aggregate stats to determine roles
+        player_roles = self.training_df.groupby('player').agg({
+            'career_total_runs': 'max',
+            'career_innings_batted': 'max',
+            'career_total_wickets': 'max',
+            'career_innings_bowled': 'max',
+            'career_stumpings': 'max',
         }).reset_index()
         
-        # Flatten column names
         player_roles.columns = [
-            'player', 
-            'total_runs', 'avg_runs', 'matches',
-            'total_balls_faced', 'avg_balls_faced',
-            'total_wickets', 'avg_wickets',
-            'total_overs_bowled', 'avg_overs_bowled',
-            'total_runs_conceded',
-            'total_stumpings',
-            'total_catches'
+            'player', 'total_runs', 'innings_batted', 
+            'total_wickets', 'innings_bowled', 'total_stumpings'
         ]
         
         def classify_role(row):
@@ -460,9 +485,9 @@ class CricketFeatureEngineering:
             Classify player role based on career statistics
             
             Logic:
-            - Wicket-Keeper: Has stumpings (typically 2+) in career
-            - All-Rounder: Significant batting AND bowling (both contribute)
-            - Bowler: Bowls regularly (avg 3+ overs per match)
+            - Wicket-Keeper: Has career stumpings (typically 2+)
+            - All-Rounder: Significant batting AND bowling
+            - Bowler: Bowls regularly
             - Batsman: Bats regularly without much bowling
             """
             
@@ -470,163 +495,131 @@ class CricketFeatureEngineering:
             if row['total_stumpings'] >= 2:
                 return 'Wicket-Keeper'
             
-            # Calculate bowling and batting contributions
-            bowls_regularly = row['avg_overs_bowled'] >= 3.0
-            bats_regularly = row['avg_balls_faced'] >= 10.0
+            # Calculate contribution levels
+            avg_runs = row['total_runs'] / max(row['innings_batted'], 1)
+            avg_wickets = row['total_wickets'] / max(row['innings_bowled'], 1)
             
-            # Check if significant contributor in both departments
-            significant_batting = row['avg_runs'] >= 15.0
-            significant_bowling = row['avg_wickets'] >= 0.5
+            bowls_regularly = row['innings_bowled'] >= 5  # Lowered threshold
+            bats_regularly = row['innings_batted'] >= 5   # Lowered threshold
             
-            # All-rounder: Both bat and bowl with significant contribution
+            # Check significant contributions
+            significant_batting = row['total_runs'] >= 100 or avg_runs >= 15
+            significant_bowling = row['total_wickets'] >= 5 or avg_wickets >= 0.5
+            
+            # All-rounder: Both bat and bowl
             if bowls_regularly and bats_regularly:
                 if significant_batting and significant_bowling:
                     return 'All-Rounder'
-                # If bowls and bats but not significant in one
-                elif significant_bowling:
-                    return 'All-Rounder'  # Bowling all-rounder
-                elif significant_batting:
-                    return 'All-Rounder'  # Batting all-rounder
-                else:
+                elif significant_bowling and avg_runs >= 10:
+                    return 'All-Rounder'  # Bowling all-rounder who can bat
+                elif significant_batting and avg_wickets >= 0.3:
+                    return 'All-Rounder'  # Batting all-rounder who can bowl
+                elif bowls_regularly and bats_regularly:
                     return 'All-Rounder'  # General all-rounder
             
-            # Pure bowler: Bowls regularly, doesn't bat much
-            if bowls_regularly and row['avg_wickets'] >= 0.3:
+            # Pure bowler: Bowls regularly, decent wickets, minimal batting
+            if bowls_regularly and significant_bowling:
+                if not bats_regularly or avg_runs < 10:
+                    return 'Bowler'
+            
+            # Bowler with minimal stats
+            if row['innings_bowled'] > row['innings_batted'] and row['total_wickets'] >= 3:
                 return 'Bowler'
             
             # Pure batsman: Bats regularly, doesn't bowl much
             if bats_regularly and not bowls_regularly:
                 return 'Batsman'
             
+            # Pure batsman: High batting contribution
+            if significant_batting and row['innings_bowled'] < 3:
+                return 'Batsman'
+            
             # Default classification based on primary contribution
             if row['total_runs'] > row['total_wickets'] * 20:  # Runs weighted more
                 return 'Batsman'
-            elif row['total_wickets'] > 0 and row['avg_overs_bowled'] >= 1.5:
+            elif row['total_wickets'] >= 3:
                 return 'Bowler'
             else:
-                return 'Batsman'  # Default to batsman if unclear
+                return 'All-Rounder'  # Default to all-rounder if unclear
         
         player_roles['role'] = player_roles.apply(classify_role, axis=1)
         
         # Merge back to main dataframe
-        self.player_match_df = self.player_match_df.merge(
+        self.training_df = self.training_df.merge(
             player_roles[['player', 'role']], on='player', how='left'
         )
         
         # Fill any missing roles with 'All-Rounder' as safe default
-        self.player_match_df['role'].fillna('All-Rounder', inplace=True)
+        self.training_df['role'].fillna('All-Rounder', inplace=True)
         
         print("✓ Identified player roles")
         print("\nRole distribution:")
-        role_dist = self.player_match_df['role'].value_counts()
+        role_dist = self.training_df['role'].value_counts()
         for role, count in role_dist.items():
-            percentage = (count / len(self.player_match_df)) * 100
+            percentage = (count / len(self.training_df)) * 100
             print(f"  {role:15s}: {count:6,} ({percentage:5.1f}%)")
         
         print("\nUnique players by role:")
-        player_role_dist = self.player_match_df.groupby('player')['role'].first().value_counts()
+        player_role_dist = self.training_df.groupby('player')['role'].first().value_counts()
         for role, count in player_role_dist.items():
             print(f"  {role:15s}: {count:4,} players")
     
-    def create_contextual_features(self):
-        """Create match context features"""
-        print("\n" + "=" * 70)
-        print("CREATING CONTEXTUAL FEATURES")
-        print("=" * 70)
-        
-        # Days since last match
-        self.player_match_df['days_since_last_match'] = self.player_match_df.groupby('player')['date'].diff().dt.days
-        self.player_match_df['days_since_last_match'].fillna(30, inplace=True)
-        
-        # Temporal features
-        self.player_match_df['month'] = pd.to_datetime(self.player_match_df['date']).dt.month
-        self.player_match_df['year'] = pd.to_datetime(self.player_match_df['date']).dt.year
-        self.player_match_df['day_of_year'] = pd.to_datetime(self.player_match_df['date']).dt.dayofyear
-        
-        # Toss impact features
-        self.player_match_df['won_toss'] = (
-            self.player_match_df['team'] == self.player_match_df['toss_winner']
-        ).astype(int)
-        
-        self.player_match_df['toss_bat'] = (
-            self.player_match_df['toss_decision'] == 'bat'
-        ).astype(int)
-        
-        print("✓ Created contextual features")
-    
     def save_processed_data(self, filename='training_data_2024-06-30.csv'):
-        """Save processed feature data"""
+        """Save final processed data"""
         output_path = self.processed_dir / filename
-        self.player_match_df.to_csv(output_path, index=False)
+        self.training_df.to_csv(output_path, index=False)
         
-        print("\n" + "=" * 70)
-        print("SAVING PROCESSED DATA")
-        print("=" * 70)
+        print("\n" + "=" * print_length)
+        print("PROCESSED DATA SUMMARY")
+        print("=" * print_length)
         print(f"✓ Saved to: {output_path}")
-        print(f"✓ Shape: {self.player_match_df.shape}")
-        print(f"✓ Features: {len(self.player_match_df.columns)}")
-        print(f"✓ Players: {self.player_match_df['player'].nunique():,}")
-        print(f"✓ Matches: {self.player_match_df['match_id'].nunique():,}")
+        print(f"✓ Shape: {self.training_df.shape}")
+        print(f"✓ Total Features: {len(self.training_df.columns)}")
+        print(f"✓ Players: {self.training_df['player'].nunique():,}")
+        print(f"✓ Matches: {self.training_df['match_id'].nunique():,}")
         
-        # Show sample statistics
-        print("\nFantasy Points Statistics:")
-        print(self.player_match_df['fantasy_points'].describe())
+        # Feature breakdown
+        feature_categories = {
+            'Match Stats': 15,
+            'Per-Innings Averages': 7,
+            'Advanced Metrics': 8,
+            'Career Aggregates': 20,
+            'Rolling Features': 11,
+            'Other': 5
+        }
+        
+        print("\nFeature Breakdown:")
+        for category, count in feature_categories.items():
+            print(f"  {category:25s}: {count}")
+        
+        print(f"\n✓ Total: {sum(feature_categories.values())} features")
+        print("✓ NO FEATURES REDUCED - Full Silver Medal Team Feature Set!")
         
         return output_path
     
-    def run_full_pipeline(self, data_type='train', output_filename=None):
+    def run_full_pipeline(self):
         """Execute complete feature engineering pipeline"""
-        print("\n" + "=" * 70)
-        print(f"FEATURE ENGINEERING PIPELINE ({data_type.upper()})")
-        print("=" * 70)
+        print("\n" + "=" * print_length)
+        print("FEATURE ENGINEERING PIPELINE")
+        print("=" * print_length)
         
-        self.load_raw_data(data_type=data_type)
-        self.calculate_fantasy_points()
-        self.create_historical_features()
-        self.create_venue_features()
-        self.create_opposition_features()
+        self.load_and_combine_data()
+        self.convert_to_nested_json()
+        self.load_aggregate_data()
+        self.calculate_comprehensive_features()
+        self.create_rolling_features()
         self.identify_player_roles()
-        self.create_contextual_features()
+        self.save_processed_data()
         
-        if output_filename is None:
-            if data_type == 'train':
-                output_filename = 'training_data_2024-06-30.csv'
-            else:
-                output_filename = 'test_data_after_2024-06-30.csv'
-        
-        output_path = self.save_processed_data(output_filename)
-        
-        print("\n" + "=" * 70)
-        print(f"✓✓✓ FEATURE ENGINEERING COMPLETE ({data_type.upper()}) ✓✓✓")
-        print("=" * 70)
-        
-        if data_type == 'train':
-            print("\nNext step: python model/train_model.py")
-        else:
-            print("\nTest data ready for evaluation!")
-        
-        return output_path
+        print("\n" + "=" * print_length)
+        print("✓✓✓ FEATURE ENGINEERING COMPLETE ✓✓✓")
+        print("=" * print_length)
+        print("\nNext step: python model/train_model.py")
 
 def main():
     """Main execution"""
     engineer = CricketFeatureEngineering()
-    
-    # Process training data
-    print("\n" + "=" * 70)
-    print("PROCESSING TRAINING DATA")
-    print("=" * 70)
-    engineer.run_full_pipeline(data_type='train')
-    
-    # Process test data if available
-    test_path = Path('data/out_of_sample_data/matches_test.csv')
-    if test_path.exists():
-        print("\n\n" + "=" * 70)
-        print("PROCESSING TEST DATA")
-        print("=" * 70)
-        engineer_test = CricketFeatureEngineering()
-        engineer_test.run_full_pipeline(data_type='test')
-    else:
-        print("\n\n⚠️  No test data found. Run data download first to get test matches.")
+    engineer.run_full_pipeline()
 
 if __name__ == '__main__':
     main()

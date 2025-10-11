@@ -1,5 +1,6 @@
 """
 Model Training Script for Dream11 Fantasy Points Prediction
+Handles expanded feature set (60+ features)
 Trains ensemble models + baseline comparisons
 """
 
@@ -27,12 +28,11 @@ class Dream11ModelTrainer:
         self.model_dir = Path(model_artifacts_dir)
         self.model_dir.mkdir(parents=True, exist_ok=True)
         
-        # Feature columns (will be determined from data)
         self.feature_cols = None
         self.target_col = 'fantasy_points'
-        self.categorical_features = ['role', 'match_type', 'gender']
+        self.categorical_features = ['role', 'match_type']
+        self.id_columns = ['player', 'match_id', 'date', 'venue', 'team', 'opposition']
         
-        # Models (main + baselines)
         self.models = {}
         self.baseline_models = {}
         self.ensemble_weights = {}
@@ -41,13 +41,13 @@ class Dream11ModelTrainer:
     def load_data(self, train_end_date='2024-06-30'):
         """Load training data with date filtering"""
         print("=" * 70)
-        print("LOADING TRAINING DATA")
+        print("LOADING TRAINING DATA (60+ FEATURES)")
         print("=" * 70)
         
         self.df = pd.read_csv(self.data_path)
         self.df['date'] = pd.to_datetime(self.df['date'])
         
-        # Filter by training end date (STRICT REQUIREMENT)
+        # Filter by training end date
         train_end = pd.to_datetime(train_end_date)
         initial_count = len(self.df)
         self.df = self.df[self.df['date'] <= train_end]
@@ -57,11 +57,8 @@ class Dream11ModelTrainer:
         print(f"✓ Loaded data up to {train_end_date}")
         print(f"✓ Total samples: {len(self.df):,}")
         print(f"✓ Filtered out (after cutoff): {filtered_count:,}")
-        print(f"✓ Date range: {self.df['date'].min()} to {self.df['date'].max()}")
-        
-        # Show match type distribution
-        if 'match_type' in self.df.columns:
-            print(f"✓ Match types: {self.df['match_type'].value_counts().to_dict()}")
+        print(f"✓ Date range: {self.df['date'].min().date()} to {self.df['date'].max().date()}")
+        print(f"✓ Match types: {self.df['match_type'].value_counts().to_dict()}")
         
         # Verify no data leakage
         if self.df['date'].max() > train_end:
@@ -80,43 +77,9 @@ class Dream11ModelTrainer:
         self.df = self.df.dropna(subset=['avg_fantasy_points_last_5'])
         print(f"✓ Removed {initial_count - len(self.df):,} rows with insufficient history")
         
-        # Define feature columns
-        feature_candidates = [
-            # Historical performance (primary features)
-            'avg_fantasy_points_last_3', 'avg_fantasy_points_last_5', 'avg_fantasy_points_last_10',
-            'ema_fantasy_points', 'career_avg_fantasy_points',
-            
-            # Batting features
-            'avg_runs_last_3', 'avg_runs_last_5', 'avg_runs_last_10',
-            'avg_strike_rate_last_3', 'avg_strike_rate_last_5', 'avg_strike_rate_last_10',
-            'career_avg_runs', 'career_avg_strike_rate',
-            
-            # Bowling features
-            'avg_wickets_last_3', 'avg_wickets_last_5', 'avg_wickets_last_10',
-            'avg_economy_last_3', 'avg_economy_last_5', 'avg_economy_last_10',
-            'career_avg_wickets', 'career_avg_economy',
-            
-            # Venue features
-            'venue_avg_fantasy_points', 'venue_matches',
-            'venue_avg_runs', 'venue_avg_wickets',
-            
-            # Opposition features
-            'opp_avg_fantasy_points', 'opp_matches',
-            'opp_avg_runs', 'opp_avg_wickets',
-            
-            # Form and context
-            'form_trend', 'consistency_last_5', 'career_matches',
-            'days_since_last_match', 'month', 'year',
-            
-            # Toss features
-            'won_toss', 'toss_bat',
-            
-            # Categorical (includes match_type for ODI/T20 differentiation)
-            'role', 'match_type', 'gender'
-        ]
-        
-        # Filter to available columns
-        self.feature_cols = [col for col in feature_candidates if col in self.df.columns]
+        # Identify feature columns (exclude IDs and target)
+        exclude_cols = self.id_columns + [self.target_col, 'career_best_bowling']  # Exclude string column
+        self.feature_cols = [col for col in self.df.columns if col not in exclude_cols]
         
         print(f"✓ Selected {len(self.feature_cols)} features")
         print(f"  - Categorical: {[f for f in self.feature_cols if f in self.categorical_features]}")
@@ -183,7 +146,7 @@ class Dream11ModelTrainer:
         baseline_configs = {
             'linear_regression': LinearRegression(),
             'ridge': Ridge(alpha=1.0, random_state=42),
-            'lasso': Lasso(alpha=1.0, random_state=42),
+            'lasso': Lasso(alpha=1.0, random_state=42, max_iter=5000),
             'random_forest': RandomForestRegressor(n_estimators=100, max_depth=10, random_state=42, n_jobs=-1),
             'gradient_boosting': GradientBoostingRegressor(n_estimators=100, max_depth=5, random_state=42)
         }
@@ -225,7 +188,7 @@ class Dream11ModelTrainer:
     def train_xgboost(self):
         """Train XGBoost model"""
         print("\n" + "=" * 70)
-        print("[XGBoost] TRAINING")
+        print("[XGBoost] TRAINING (60+ Features)")
         print("=" * 70)
         
         model = xgb.XGBRegressor(
@@ -249,7 +212,6 @@ class Dream11ModelTrainer:
             verbose=False
         )
         
-        # Predictions
         train_pred = model.predict(self.X_train)
         val_pred = model.predict(self.X_val)
         
@@ -285,10 +247,9 @@ class Dream11ModelTrainer:
     def train_lightgbm(self):
         """Train LightGBM model"""
         print("\n" + "=" * 70)
-        print("[LightGBM] TRAINING")
+        print("[LightGBM] TRAINING (60+ Features)")
         print("=" * 70)
         
-        # Prepare categorical features for LightGBM
         cat_indices = [i for i, col in enumerate(self.X_train.columns) if col in self.categorical_features]
         
         model = lgb.LGBMRegressor(
@@ -312,7 +273,6 @@ class Dream11ModelTrainer:
             categorical_feature=cat_indices
         )
         
-        # Predictions
         train_pred = model.predict(self.X_train)
         val_pred = model.predict(self.X_val)
         
@@ -348,10 +308,9 @@ class Dream11ModelTrainer:
     def train_catboost(self):
         """Train CatBoost model"""
         print("\n" + "=" * 70)
-        print("[CatBoost] TRAINING")
+        print("[CatBoost] TRAINING (60+ Features)")
         print("=" * 70)
         
-        # Prepare categorical features
         cat_features = [col for col in self.categorical_features if col in self.X_train.columns]
         
         model = CatBoostRegressor(
@@ -370,7 +329,6 @@ class Dream11ModelTrainer:
             use_best_model=True
         )
         
-        # Predictions
         train_pred = model.predict(self.X_train)
         val_pred = model.predict(self.X_val)
         
@@ -404,12 +362,11 @@ class Dream11ModelTrainer:
         return model
     
     def create_ensemble(self):
-        """Create weighted ensemble of all models"""
+        """Create weighted ensemble"""
         print("\n" + "=" * 70)
         print("CREATING ENSEMBLE")
         print("=" * 70)
         
-        # Inverse MAE weighting (better models get higher weight)
         total_inverse_mae = sum(1/m['val_mae'] for m in self.models.values())
         
         print("Model weights (based on inverse MAE):")
@@ -418,7 +375,6 @@ class Dream11ModelTrainer:
             self.ensemble_weights[name] = weight
             print(f"  {name:12s}: {weight:.4f} (MAE: {model_dict['val_mae']:.2f})")
         
-        # Ensemble predictions on validation set
         ensemble_pred = np.zeros(len(self.y_val))
         for name, model_dict in self.models.items():
             ensemble_pred += self.ensemble_weights[name] * model_dict['val_predictions']
@@ -427,7 +383,6 @@ class Dream11ModelTrainer:
         ensemble_r2 = r2_score(self.y_val, ensemble_pred)
         ensemble_rmse = np.sqrt(mean_squared_error(self.y_val, ensemble_pred))
         
-        # Calculate train predictions for ensemble
         ensemble_train_pred = np.zeros(len(self.y_train))
         for name, model_dict in self.models.items():
             train_pred = model_dict['model'].predict(self.X_train)
@@ -459,12 +414,11 @@ class Dream11ModelTrainer:
         return ensemble_pred
     
     def compare_all_models(self):
-        """Generate comparison report of all models"""
+        """Generate comparison report"""
         print("\n" + "=" * 70)
         print("MODEL COMPARISON SUMMARY")
         print("=" * 70)
         
-        # Sort by validation MAE
         sorted_models = sorted(self.all_results.items(), key=lambda x: x[1]['val_mae'])
         
         print(f"\n{'Model':<20} {'Type':<12} {'Train MAE':<12} {'Val MAE':<12} {'Val RMSE':<12} {'Val R²':<10}")
@@ -480,7 +434,6 @@ class Dream11ModelTrainer:
         best_model = sorted_models[0][0]
         print(f"\n✓ Best Model: {best_model.upper()} (Val MAE: {sorted_models[0][1]['val_mae']:.2f})")
         
-        # Calculate improvement over baseline
         if 'linear_regression' in self.all_results:
             baseline_mae = self.all_results['linear_regression']['val_mae']
             ensemble_mae = self.all_results['ensemble']['val_mae']
@@ -493,25 +446,21 @@ class Dream11ModelTrainer:
         print("SAVING MODELS")
         print("=" * 70)
         
-        # Save individual ensemble models
         for name, model_dict in self.models.items():
             model_path = self.model_dir / f"{model_name}_{name}.pkl"
             joblib.dump(model_dict['model'], model_path)
             print(f"✓ Saved {name:12s} -> {model_path.name}")
         
-        # Save baseline models
         for name, model_dict in self.baseline_models.items():
             model_path = self.model_dir / f"{model_name}_baseline_{name}.pkl"
             joblib.dump(model_dict['model'], model_path)
         print(f"✓ Saved {len(self.baseline_models)} baseline models")
         
-        # Save ensemble weights
         weights_path = self.model_dir / f"{model_name}_ensemble_weights.json"
         with open(weights_path, 'w') as f:
             json.dump(self.ensemble_weights, f, indent=2)
-        print(f"✓ Saved ensemble weights -> {weights_path.name}")
+        print(f"✓ Saved ensemble weights")
         
-        # Save complete comparison results
         comparison_path = self.model_dir / f"{model_name}_model_comparison.json"
         comparison_data = {
             'all_models': self.all_results,
@@ -520,71 +469,53 @@ class Dream11ModelTrainer:
         }
         with open(comparison_path, 'w') as f:
             json.dump(comparison_data, f, indent=2)
-        print(f"✓ Saved model comparison -> {comparison_path.name}")
+        print(f"✓ Saved model comparison")
         
-        # Save feature metadata
         metadata = {
             'feature_columns': self.feature_cols,
             'categorical_features': self.categorical_features,
             'target_column': self.target_col,
+            'num_features': len(self.feature_cols),
             'ensemble_mae': float(self.ensemble_mae),
             'ensemble_rmse': float(self.ensemble_rmse),
             'ensemble_r2': float(self.ensemble_r2),
             'training_date': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
             'training_samples': len(self.X_train),
             'validation_samples': len(self.X_val),
-            'model_performances': {
-                name: {
-                    'val_mae': float(model_dict['val_mae']),
-                    'val_rmse': float(model_dict['val_rmse']),
-                    'val_r2': float(model_dict['val_r2'])
-                }
-                for name, model_dict in self.models.items()
-            }
         }
         
         metadata_path = self.model_dir / f"{model_name}_metadata.json"
         with open(metadata_path, 'w') as f:
             json.dump(metadata, f, indent=2)
-        print(f"✓ Saved metadata -> {metadata_path.name}")
+        print(f"✓ Saved metadata")
         
         print(f"\n✓ All models saved to: {self.model_dir}/")
     
     def train_full_pipeline(self, train_end_date='2024-06-30', model_name='ProductUIModel'):
         """Execute complete training pipeline"""
         print("\n" + "=" * 70)
-        print("DREAM11 MODEL TRAINING PIPELINE")
+        print("DREAM11 MODEL TRAINING PIPELINE (60+ FEATURES)")
         print("=" * 70)
         print(f"Model Name: {model_name}")
         print(f"Training Cutoff: {train_end_date}")
         print("=" * 70)
         
-        # Load and prepare data
         self.load_data(train_end_date)
         self.prepare_features()
         self.split_data()
-        
-        # Train baseline models
         self.train_baseline_models()
-        
-        # Train ensemble models
         self.train_xgboost()
         self.train_lightgbm()
         self.train_catboost()
-        
-        # Create ensemble
         self.create_ensemble()
-        
-        # Compare all models
         self.compare_all_models()
-        
-        # Save models
         self.save_models(model_name)
         
         print("\n" + "=" * 70)
         print("✓✓✓ TRAINING COMPLETE ✓✓✓")
         print("=" * 70)
         print(f"\nBest Model: Ensemble (MAE: {self.ensemble_mae:.2f})")
+        print(f"Using {len(self.feature_cols)} features (Silver Medal Team approach)")
         print(f"Models saved to: {self.model_dir}/")
         print("\nNext step: streamlit run main_app.py")
 
