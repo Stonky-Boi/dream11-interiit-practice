@@ -10,14 +10,15 @@ import json
 
 sys.path.append(str(Path(__file__).parent))
 
+# Set page config ONCE at the very beginning
+st.set_page_config(
+    page_title="Dream11 Team Builder",
+    page_icon="🏏",
+    layout="wide",
+    initial_sidebar_state="expanded"
+)
+
 def main():
-    st.set_page_config(
-        page_title="Dream11 Team Builder",
-        page_icon="🏏",
-        layout="wide",
-        initial_sidebar_state="expanded"
-    )
-    
     # Sidebar navigation
     st.sidebar.title("🏏 Dream11 AI")
     st.sidebar.markdown("### Navigation")
@@ -34,9 +35,9 @@ def main():
     **Dream11 Inter-IIT Tech Meet 13.0**
     
     AI-powered fantasy cricket team builder using:
-    - **60+ Features** (Silver Medal Team approach)
+    - **45+ Features** (Historical only - no leakage)
     - **Ensemble ML** (XGBoost + LightGBM + CatBoost)
-    - **7,000+ Matches** from Cricsheet
+    - **270,000+ Records** from Cricsheet
     - **Career Aggregate Stats** integration
     """)
     
@@ -72,7 +73,6 @@ def main():
         from UI.model_ui import ModelUI
         ui = ModelUI()
         ui.run()
-
 
 if __name__ == '__main__':
     main()

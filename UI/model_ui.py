@@ -1,6 +1,5 @@
 """
 Model UI - Model Training and Evaluation Interface
-Works with 60+ feature set
 """
 
 import streamlit as st
@@ -308,6 +307,14 @@ class ModelUI:
         # Training section
         st.header("1️⃣ Training Configuration")
         
+        st.warning("""
+        **Important:** All data is limited to 2024-06-30 (competition requirement).
+        For evaluation:
+        - Use a train-test split within the available data
+        - Example: Train on 2010-2023, Test on 2024-01 to 2024-06-30
+        - Or use cross-validation on the full dataset
+        """)
+        
         col1, col2 = st.columns(2)
         
         with col1:
@@ -320,22 +327,26 @@ class ModelUI:
             
             test_start = st.date_input(
                 "Testing Start Date",
-                value=datetime(2024, 7, 1),
-                min_value=datetime(2020, 1, 1)
+                value=datetime(2024, 1, 1),
+                min_value=datetime(2020, 1, 1),
+                max_value=datetime(2024, 6, 30),
+                help="Must be within available data (up to 2024-06-30)"
             )
         
         with col2:
             train_end = st.date_input(
                 "Training End Date",
-                value=datetime(2024, 6, 30),
+                value=datetime(2023, 12, 31),
                 min_value=datetime(2000, 1, 1),
                 max_value=datetime(2024, 6, 30)
             )
             
             test_end = st.date_input(
                 "Testing End Date",
-                value=datetime(2024, 9, 30),
-                min_value=datetime(2020, 1, 1)
+                value=datetime(2024, 6, 30),
+                min_value=datetime(2020, 1, 1),
+                max_value=datetime(2024, 6, 30),
+                help="Maximum date is 2024-06-30 (competition cutoff)"
             )
         
         model_name = st.text_input(
@@ -349,8 +360,12 @@ class ModelUI:
         
         if train_end > cutoff_date:
             st.error("⚠️ DISQUALIFICATION RISK: Training end date must be ≤ 2024-06-30")
+        elif test_end > cutoff_date:
+            st.error("⚠️ Testing end date must be ≤ 2024-06-30 (data cutoff)")
         elif test_start <= train_end:
             st.warning("⚠️ Testing period should start after training period")
+        elif test_start < datetime(2024, 1, 1).date():
+            st.info("ℹ️ Recommended test period: 2024-01-01 to 2024-06-30 for temporal validation")
         else:
             st.success("✅ Date configuration is valid")
         

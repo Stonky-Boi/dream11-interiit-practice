@@ -1,6 +1,5 @@
 """
 Product UI - Dream11 Team Recommendation Interface
-Works with 60+ feature set and aggregate stats
 """
 
 import streamlit as st
@@ -367,12 +366,12 @@ class ProductUI:
         # Information section
         with st.expander("ℹ️ How It Works"):
             st.markdown("""
-            ### Feature Set (60+ Features)
+            ### Feature Set (45+ Features)
             
-            **Match-Level Stats:**
+            **Historical Performance Features:**
             - Recent form (last 3, 5, 10 matches)
-            - Per-innings averages (runs, wickets, etc.)
-            - Advanced metrics (boundary %, bowling S/R, etc.)
+            - Rolling averages for runs, wickets, fantasy points
+            - EMA and form trend indicators
             
             **Career Aggregate Stats:**
             - 20+ career statistics from Cricsheet
@@ -382,8 +381,8 @@ class ProductUI:
             
             **Machine Learning Models:**
             - XGBoost, LightGBM, CatBoost ensemble
-            - Trained on 7,000+ international matches
-            - Baseline comparisons with traditional models
+            - Trained on 270,000+ player-innings records
+            - No data leakage - all features historical only
             
             ### Dream11 Constraints
             - 11 players total

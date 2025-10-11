@@ -184,8 +184,8 @@ class Dream11Predictor:
     
     def calculate_features_for_upcoming_match(self, player_name, match_type='t20', venue='', opposition=''):
         """
-        Calculate all 60+ features for a player for an upcoming match
-        Uses historical data + aggregate stats
+        Calculate all features for a player for an upcoming match
+        Uses historical data only
         """
         # Get recent match history
         recent_matches = self.get_player_recent_features(player_name, match_type)
@@ -203,24 +203,22 @@ class Dream11Predictor:
             if format_key in self.aggregate_data[player_name]:
                 agg_stats = self.aggregate_data[player_name][format_key]
         
-        # Calculate rolling features
+        # Calculate rolling features from recent matches (already historical)
         rolling_features = {
             'avg_fantasy_points_last_3': recent_matches['fantasy_points'].tail(3).mean(),
             'avg_fantasy_points_last_5': recent_matches['fantasy_points'].tail(5).mean(),
             'avg_fantasy_points_last_10': recent_matches['fantasy_points'].tail(10).mean(),
-            'avg_runs_last_3': recent_matches['total_runs'].tail(3).mean(),
-            'avg_runs_last_5': recent_matches['total_runs'].tail(5).mean(),
-            'avg_runs_last_10': recent_matches['total_runs'].tail(10).mean(),
-            'avg_wickets_last_3': recent_matches['total_wickets'].tail(3).mean(),
-            'avg_wickets_last_5': recent_matches['total_wickets'].tail(5).mean(),
-            'avg_wickets_last_10': recent_matches['total_wickets'].tail(10).mean(),
-            'ema_fantasy_points': recent_matches['fantasy_points'].ewm(span=5, adjust=False).mean().iloc[-1],
-            'form_trend': (recent_matches['fantasy_points'].tail(3).mean() - 
-                          recent_matches['fantasy_points'].tail(10).mean()),
-            'consistency_last_5': recent_matches['fantasy_points'].tail(5).std(),
+            'avg_runs_last_3': recent_matches['avg_runs_last_3'].tail(3).mean(),
+            'avg_runs_last_5': recent_matches['avg_runs_last_5'].tail(5).mean(),
+            'avg_runs_last_10': recent_matches['avg_runs_last_10'].tail(10).mean(),
+            'avg_wickets_last_3': recent_matches['avg_wickets_last_3'].tail(3).mean(),
+            'avg_wickets_last_5': recent_matches['avg_wickets_last_5'].tail(5).mean(),
+            'avg_wickets_last_10': recent_matches['avg_wickets_last_10'].tail(10).mean(),
+            'form_trend': latest_match.get('form_trend', 0),
+            'consistency_last_5': latest_match.get('consistency_last_5', 0),
         }
         
-        # Create feature dictionary
+        # Create feature dictionary with ONLY features that exist in training data
         features = {
             'player': player_name,
             'match_type': match_type.lower(),
@@ -228,8 +226,18 @@ class Dream11Predictor:
             'opposition': opposition,
             'role': latest_match.get('role', 'All-Rounder'),
             
-            # Use averages from recent matches as proxy
+            # Use recent match features (all historical)
             **rolling_features,
+            
+            # Historical averages
+            'hist_avg_runs': latest_match.get('hist_avg_runs', 0),
+            'hist_avg_wickets': latest_match.get('hist_avg_wickets', 0),
+            'hist_avg_strike_rate': latest_match.get('hist_avg_strike_rate', 0),
+            'hist_avg_economy': latest_match.get('hist_avg_economy', 0),
+            'hist_matches_played': latest_match.get('hist_matches_played', 0),
+            
+            # EMA
+            'ema_fantasy_points': latest_match.get('ema_fantasy_points', 0),
             
             # Career aggregate stats
             'career_matches': float(agg_stats.get('Matches', 0)) if agg_stats else 0,
@@ -252,38 +260,6 @@ class Dream11Predictor:
             'career_catches': float(agg_stats.get('Catches', 0)) if agg_stats else 0,
             'career_stumpings': float(agg_stats.get('Stumpings', 0)) if agg_stats else 0,
             'career_run_outs': float(agg_stats.get('RunOuts', 0)) if agg_stats else 0,
-            
-            # Other features (use latest values)
-            'total_runs': latest_match.get('total_runs', 0),
-            'balls_faced': latest_match.get('balls_faced', 0),
-            'fours': latest_match.get('fours', 0),
-            'sixes': latest_match.get('sixes', 0),
-            'strike_rate': latest_match.get('strike_rate', 0),
-            'is_duck': 0,
-            'total_wickets': latest_match.get('total_wickets', 0),
-            'balls_bowled': latest_match.get('balls_bowled', 0),
-            'runs_conceded': latest_match.get('runs_conceded', 0),
-            'economy_rate': latest_match.get('economy_rate', 0),
-            'maidens': latest_match.get('maidens', 0),
-            'overs_bowled': latest_match.get('overs_bowled', 0),
-            'catches': latest_match.get('catches', 0),
-            'stumpings': latest_match.get('stumpings', 0),
-            'run_outs': latest_match.get('run_outs', 0),
-            'num_innings_batted': latest_match.get('num_innings_batted', 1),
-            'avg_runs_per_inning': latest_match.get('avg_runs_per_inning', 0),
-            'avg_wickets_per_inning': latest_match.get('avg_wickets_per_inning', 0),
-            'avg_sixes_per_inning': latest_match.get('avg_sixes_per_inning', 0),
-            'avg_fours_per_inning': latest_match.get('avg_fours_per_inning', 0),
-            'avg_balls_faced_per_inning': latest_match.get('avg_balls_faced_per_inning', 0),
-            'avg_balls_bowled_per_inning': latest_match.get('avg_balls_bowled_per_inning', 0),
-            'boundary_percentage': latest_match.get('boundary_percentage', 0),
-            'runs_per_ball': latest_match.get('runs_per_ball', 0),
-            'dot_ball_percentage': 0,
-            'bowling_strike_rate': latest_match.get('bowling_strike_rate', 0),
-            'runs_per_ball_conceded': latest_match.get('runs_per_ball_conceded', 0),
-            'dot_balls_bowled': 0,
-            'wickets_per_innings': latest_match.get('wickets_per_innings', 0),
-            'matches_in_last_30_days': 5,  # Approximate
         }
         
         return pd.DataFrame([features])
