@@ -2,3 +2,5 @@ venv/
 data/
 catboost_info/
 __pycache__/
+.vite
+node_modules/
