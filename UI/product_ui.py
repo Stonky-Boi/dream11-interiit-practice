@@ -39,7 +39,7 @@ class ProductUI:
             st.stop()
     
     def load_player_database(self):
-        training_data_path = Path('data/processed/training_data_2024-06-30.csv')
+        training_data_path = Path('data/processed/training_data_all.csv')
         
         if not training_data_path.exists():
             st.error("Training data not found. Please run feature engineering first.")

@@ -47,7 +47,7 @@ def main():
         st.sidebar.info("Train a model using Model UI")
     
     # Check if data exists
-    data_path = Path('data/processed/training_data_2024-06-30.csv')
+    data_path = Path('data/processed/training_data_all.csv')
     if data_path.exists():
         st.sidebar.success("✅ Training data ready")
     else:

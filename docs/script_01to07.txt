@@ -1,0 +1,40 @@
+Slide 1:
+Good evening. I'm presenting Team 7's AI-powered Dream11 prediction system. These are my teammates <insert names> and our mentor <insert name>.
+
+Slide 2:
+Today I'll cover six sections: Problem Statement, Feature Engineering, Model Architecture, Explainability, a Live Demo, and Future Prospects. Let's start with the problem.
+
+Slide 3:
+We address three core challenges:
+First - predicting player performance despite inherent randomness. Even elite players can score zero.
+Second - building trust through explainability. Users need to understand WHY we recommend players.
+Third - ensuring production-readiness with response times under 10 seconds and intuitive interfaces for all user types.
+
+Slide 4:
+Our solution has three pillars:
+Pillar 1 - 39 comprehensive features spanning career statistics, rolling form over last 3-5-10 matches, and match context.
+Pillar 2 - A weighted ensemble combining XGBoost, LightGBM, and CatBoost, plus a prototype-based explainability layer.
+Pillar 3 - Two interfaces: Product UI for team building and Model UI for advanced evaluation.
+
+Slide 5:
+Our four-stage pipeline processes 338,191 player-innings from 2010 to 2025.
+Stage 1 - We use Cricsheet's comprehensive ball-by-ball JSON data covering T20 and ODI formats.
+Stage 2 - Automated download via cricketstats library with progress tracking.
+Stage 3 - Convert nested JSON to structured CSV with player-innings-level statistics.
+Stage 4 - Generate career summaries including total runs, wickets, averages, strike rates, and milestone counts.
+
+Slide 6:
+Feature engineering drives our performance. We engineered 39 features across four categories:
+Category 1 - Match Context: 15 features including player role, format, and temporal factors.
+Category 2 - Career Aggregates: 20 features like total runs, wickets, batting average, strike rate, and milestone counts.
+Category 3 - Our Innovation - Recent Form: 11 rolling window features tracking last 3, 5, and 10 matches, plus EMA and form trend showing momentum.
+Category 4 - Target Variable: Dream11 fantasy points calculated from runs (+1), wickets (+25), boundaries, strike rate bonuses, and fielding points.
+This multi-dimensional approach balances established quality with current momentum."
+
+Slide 7:
+Four key analyses validate our approach.
+Analysis 1: Model Comparison - Looking at test set MAE, simple baselines like linear regression achieve 15-16 MAE. Our ensemble models - XGBoost, LightGBM, CatBoost - all perform around 13.2-13.3. The weighted ensemble achieves best performance at 13.23 MAE.
+Analysis 2: Learning Curves - Train-validation gaps are small: XGBoost 0.88 points, LightGBM 0.32, CatBoost just 0.14. This confirms strong regularization and generalization.
+Analysis 3: Match Format Performance - T20 shows slightly higher error than ODI, which makes sense given T20's inherent randomness. Our model handles both formats effectively.
+Analysis 4: Feature Importance - The top features are overwhelmingly from our recent form category: career_total_wickets, ema_fantasy_points, and hist_matches_played dominate. Then career statistics and form_trend. This validates that recent momentum combined with established quality drives predictions.
+Notably, venue and opposition don't appear in top features, which is interesting.

@@ -23,7 +23,7 @@ class ModelUI:
         st.info(f"📚 Training model from {train_start} to {train_end}...")
         
         # Load all data
-        data_path = self.processed_dir / 'training_data_2024-06-30.csv'
+        data_path = self.processed_dir / 'training_data_all.csv'
         if not data_path.exists():
             st.error("Training data not found. Please run feature engineering first.")
             return None
@@ -118,7 +118,7 @@ class ModelUI:
             test_end = pd.to_datetime(test_end)
             
             # Load test data
-            data_path = self.processed_dir / 'training_data_2024-06-30.csv'
+            data_path = self.processed_dir / 'training_data_all.csv'
             if not data_path.exists():
                 st.error("No processed data found. Run feature engineering first.")
                 return None

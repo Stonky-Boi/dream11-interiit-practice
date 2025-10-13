@@ -49,7 +49,7 @@
   "ensemble_mae": 12.972988377243377,
   "ensemble_rmse": 21.51993975985663,
   "ensemble_r2": 0.27119050982897797,
-  "training_date": "2025-10-11 19:29:37",
+  "training_date": "2025-10-13 23:09:22",
   "training_samples": 249180,
   "validation_samples": 27686,
   "testing_samples": 61325
